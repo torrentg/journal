@@ -178,17 +178,6 @@ int run(ldb_db_t *db)
     return 0;
 }
 
-#ifdef LDB_IMPL
-int main(void)
-{
-    ldb_db_t db = {0};
-
-    srand(time(NULL));
-    run(&db);
-
-    return 0;
-}
-#else
 int main(void)
 {
     ldb_db_t *db = ldb_alloc();
@@ -199,4 +188,3 @@ int main(void)
     ldb_free(db);
     return 0;
 }
-#endif

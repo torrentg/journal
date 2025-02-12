@@ -1,8 +1,15 @@
+#include <time.h>
+#include <stdio.h>
+#include <errno.h>
+#include <ctype.h>
+#include <string.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <getopt.h>
-
-#define LDB_IMPL
+#include <pthread.h>
 #include "logdb.h"
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
 
 typedef struct {
     bool truncate_db;
@@ -60,6 +67,16 @@ typedef struct {
 static volatile bool interrupted = false;
 static const char *bytes_suffix[] = {"B", "KB", "MB", "GB", "TB"};
 #define BYTES_SUFFIX_LEN (sizeof(bytes_suffix)/sizeof(bytes_suffix[0]))
+
+static uint64_t get_millis(void)
+{
+    struct timespec  ts = {0};
+
+    if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
+        return 0;
+
+    return (uint64_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+}
 
 static void signal_handler(int signum)
 {
@@ -137,9 +154,9 @@ static void * run_write(void *args)
     results_write_t *results = &((args_write_t *) args)->results;
 
     char *data = calloc(params->bytes_per_record, 1);
-    size_t num_entries = ldb_min(params->records_per_commit, params->records_per_second);
+    size_t num_entries = MIN(params->records_per_commit, params->records_per_second);
     ldb_entry_t *entries = calloc(num_entries, sizeof(ldb_entry_t));
-    uint64_t time0 = ldb_get_millis();
+    uint64_t time0 = get_millis();
     size_t num = 0;
 
     // Logdb supports records of variable length.
@@ -175,7 +192,7 @@ static void * run_write(void *args)
 
         while(true)
         {
-            results->time_ms = ldb_get_millis() - time0;
+            results->time_ms = get_millis() - time0;
             if (results->time_ms >= 1000*params->max_seconds)
                 break;
 
@@ -201,7 +218,7 @@ static void * run_read(void *args)
 
     size_t num_entries = params->records_per_query;
     ldb_entry_t *entries = calloc(num_entries, sizeof(ldb_entry_t));
-    uint64_t time0 = ldb_get_millis();
+    uint64_t time0 = get_millis();
     ldb_stats_t stats = {0};
     uint64_t seqnum = 0;
     size_t num = 0;
@@ -234,7 +251,7 @@ static void * run_read(void *args)
 
         while (true)
         {
-            results->time_ms = ldb_get_millis() - time0;
+            results->time_ms = get_millis() - time0;
             if (results->time_ms >= 1000*params->max_seconds)
                 break;
 
@@ -497,20 +514,21 @@ int main(int argc, char *argv[])
     srand(time(NULL));
     signal(SIGINT, signal_handler);
 
-    ldb_db_t db = {0};
-    if (ldb_open(&db, "", "performance", false) != LDB_OK) {
+    ldb_db_t *db = ldb_alloc();
+
+    if (ldb_open(db, "", "performance", false) != LDB_OK) {
         fprintf(stderr, "error opening database\n");
         return EXIT_FAILURE;
     }
 
-    db.force_fsync = params_db.force_sync;
+    ldb_set_fsync_mode(db, params_db.force_sync);
 
     pthread_t thread_write;
-    args_write_t args_write = { .db = &db, .params = params_write };
+    args_write_t args_write = { .db = db, .params = params_write };
     pthread_create(&thread_write, NULL, run_write, &args_write); 
 
     pthread_t thread_read;
-    args_read_t args_read = { .db = &db, .params = params_read };
+    args_read_t args_read = { .db = db, .params = params_read };
     pthread_create(&thread_read, NULL, run_read, &args_read); 
 
     pthread_join(thread_write, NULL);
@@ -519,6 +537,8 @@ int main(int argc, char *argv[])
     print_results_write(&args_write.results);
     print_results_read(&args_read.results);
 
-    ldb_close(&db);
+    ldb_close(db);
+    ldb_free(db);
+
     return EXIT_SUCCESS;
 }

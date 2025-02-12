@@ -1,7 +1,7 @@
 # logdb
 
 A simple log-structured database.
-It is a header-only C embeded database with no dependencies.
+It is an embeded database with no dependencies.
 
 Logdb is a simple database with the following characteristics:
 
@@ -50,10 +50,9 @@ access. We rely on the filesystem cache (managed by the operating system) to ens
 
 ## Usage
 
-Drop off [`logdb.h`](logdb.h) in your project and start using it.
+Drop off [`logdb.h`](logdb.h) and [`logdb.c`](logdb.c) in your project and start using it.
 
 ```
-#define LDB_IMPL
 #include "logdb.h"
 
 ldb_db_t db = {0};

@@ -1,7 +1,7 @@
 #include "acutest.h"
 
-#define LDB_IMPL
 #include "logdb.h"
+#include "logdb.c"
 
 void append_entries(ldb_db_t *db, uint64_t seqnum1, uint64_t seqnum2)
 {
@@ -1352,6 +1352,22 @@ void test_purge_all(void)
     ldb_close(&db);
 }
 
+void test_alloc_all(void)
+{
+    ldb_db_t *db = ldb_alloc();
+    TEST_ASSERT(db != NULL);
+    ldb_free(db);
+}
+
+void test_fsync_all(void)
+{
+    ldb_db_t db = {0};
+
+    TEST_ASSERT(ldb_set_fsync_mode(&db, true) == 0);
+    TEST_ASSERT(ldb_set_fsync_mode(&db, false) == 0);
+    TEST_ASSERT(ldb_set_fsync_mode(NULL, true) != 0);
+}
+
 TEST_LIST = {
     { "crc32()",                      test_crc32 },
     { "version()",                    test_version },
@@ -1400,5 +1416,7 @@ TEST_LIST = {
     { "purge() nothing",              test_purge_nothing },
     { "purge() nominal case",         test_purge_nominal_case },
     { "purge() all",                  test_purge_all },
+    { "alloc() all",                  test_alloc_all },
+    { "fsync() all",                  test_fsync_all },
     { NULL, NULL }
 };
