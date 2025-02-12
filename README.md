@@ -10,11 +10,11 @@ Logdb is a simple database with the following characteristics:
 * Records are indexed by timestamp (monotonic non-decreasing field)
 * There are no other indexes other than seqnum and timestamp.
 * Records can be appended, read, and searched
-* Records can not be updated nor deleted
-* Allows to revert last entries (rollback)
-* Allows to remove obsolete entries (purge)
-* Read-write concurrency supported (multi-thread)
-* Automatic data recovery on catastrofic event
+* Records cannot be updated or deleted
+* Allows reverting the last entries (rollback)
+* Allows removing obsolete entries (purge)
+* Supports read-write concurrency (multi-thread)
+* Automatic data recovery in case of catastrofic events
 * Minimal memory footprint
 
 Use cases:
@@ -24,12 +24,13 @@ Use cases:
 
 ## Description
 
-Basically, logdb is an append-only data file (\*.dat) with an index file (\*.idx) used to speed up lookups. No complex data structures, no sofisticated algorithms, only basic file
-access. We rely on the filesystem cache (managed by the operating system) to ensure read performance.
+Logdb is essentially an append-only data file (\*.dat) with an index file (\*.idx) used to speed up lookups.
+No complex data structures, no sofisticated algorithms, only basic file access.
+We rely on the filesystem cache (managed by the operating system) to ensure read performance.
 
 ### dat file format
 
-```
+```txt
      header       record1          data1          record2       data2
 ┌──────┴──────┐┌─────┴─────┐┌────────┴────────┐┌─────┴─────┐┌─────┴─────┐...
   magic number   seqnum1        raw bytes 1      seqnum2     raw bytes 2
@@ -40,7 +41,7 @@ access. We rely on the filesystem cache (managed by the operating system) to ens
 
 ### idx file format
 
-```
+```txt
      header      record1       record2
 ┌──────┴──────┐┌─────┴─────┐┌─────┴─────┐...
   magic number   seqnum1      seqnum2
@@ -50,9 +51,9 @@ access. We rely on the filesystem cache (managed by the operating system) to ens
 
 ## Usage
 
-Drop off [`logdb.h`](logdb.h) and [`logdb.c`](logdb.c) in your project and start using it.
+Drop [`logdb.h`](logdb.h) and [`logdb.c`](logdb.c) into your project and start using it.
 
-```
+```c
 #include "logdb.h"
 
 ldb_db_t db = {0};
@@ -73,7 +74,7 @@ ldb_free_entries(rentries, MAX_ENTRIES);
 ldb_close(&db);
 ```
 
-Read functions documentation in `logdb.h`.<br/>
+Read the function documentation in `logdb.h`.<br/>
 See [`example.c`](example.c) for basic function usage.<br/>
 See [`performance.c`](performance.c) for concurrent usage.
 

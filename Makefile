@@ -2,16 +2,20 @@
 CFLAGS= -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -Wnull-dereference -pthread
 LDFLAGS= -lpthread
 
-all: tests example performance
+TARGETS = tests example performance
+
+.PHONY: all clean coverage valgrind helgrind cppcheck loc
+
+all: $(TARGETS)
 
 tests: tests.c logdb.h  logdb.c
-	$(CC) -g $(CFLAGS) -DRUNNING_ON_VALGRIND -o tests tests.c $(LDFLAGS)
+	$(CC) -g $(CFLAGS) -DRUNNING_ON_VALGRIND -o $@ tests.c $(LDFLAGS)
 
 example: example.c logdb.h logdb.c
-	$(CC) -g $(CFLAGS) -o example example.c logdb.c $(LDFLAGS)
+	$(CC) -g $(CFLAGS) -o $@ example.c logdb.c $(LDFLAGS)
 
 performance: performance.c logdb.h logdb.c
-	$(CC) -g $(CFLAGS) -o performance performance.c logdb.c $(LDFLAGS)
+	$(CC) -g $(CFLAGS) -o $@ performance.c logdb.c $(LDFLAGS)
 
 coverage: tests.c logdb.h logdb.c
 	$(CC) --coverage -O0 $(CFLAGS) -o tests-coverage tests.c -lgcov $(LDFLAGS)
@@ -33,9 +37,7 @@ loc:
 	cloc logdb.h logdb.c tests.c example.c performance.c
 
 clean: 
-	rm -f tests test.dat test.idx test.tmp
-	rm -f example example.dat example.idx example.tmp
-	rm -f performance performance.dat performance.idx
+	rm -f $(TARGETS)
+	rm -f *.dat *.idx *.tmp *.gcda *.gcno
 	rm -f tests-coverage
-	rm -f *.gcda *.gcno
 	rm -rf coverage/

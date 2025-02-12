@@ -1,12 +1,13 @@
 *.o
 *.dat
 *.idx
+*.tmp
+*.gcda
+*.gcno
 tests
 tests-coverage
 example
 performance
-*.gcda
-*.gcno
 coverage/
 .vscode/
 temp/
