@@ -1,8 +1,8 @@
 /*
 MIT License
 
-logdb -- A simple log-structured database.
-<https://github.com/torrentg/logdb>
+journal -- A simple log-structured library for event-driven applications.
+<https://github.com/torrentg/journal>
 
 Copyright (c) 2024 Gerard Torrent <gerard@generacio.com>
 
@@ -25,19 +25,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#ifndef LOGDB_H
-#define LOGDB_H
+#ifndef JOURNAL_H
+#define JOURNAL_H
 
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
 /**
- * Logdb is a simple database with the following characteristics:
+ * A simple log-structured library for event-driven applications.
+ * 
+ * Journal is essentially an append-only data file (*.dat) with an index file (*.idx) used to speed up lookups.
+ * No complex data structures, no sofisticated algorithms, only basic file access.
+ * We rely on the filesystem cache (managed by the operating system) to ensure read performance.
+ * 
+ * Main features:
  *   - Variable length record type
  *   - Records uniquely identified by a sequential number (seqnum)
  *   - Records are indexed by timestamp (monotonic non-decreasing field)
- *   - There are no other indexes other than seqnum and timestamp.
+ *   - There are no other indexes other than seqnum and timestamp
  *   - Records can be appended, read, and searched
  *   - Records cannot be updated or deleted
  *   - Allows reverting the last entries (rollback)
@@ -45,16 +51,7 @@ SOFTWARE.
  *   - Supports read-write concurrency (multi-thread)
  *   - Automatic data recovery in case of catastrofic events
  *   - Minimal memory footprint
- * 
- * Use cases:
- *   - Storage engine in a raft library (fault-tolerant distributed applications)
- *   - Storage engine for journal-based apps
- * 
- * Logdb is essentially an append-only data file (*.dat) with 
- * an index file (*.idx) used to speed up lookups. No complex 
- * data structures, no sofisticated algorithms, only basic file
- * access. We rely on the filesystem cache (managed by the operating 
- * system) to ensure read performance.
+ *   - No dependencies
  * 
  * dat file format
  * ---------------
@@ -286,9 +283,9 @@ int ldb_set_fsync_mode(ldb_db_t *obj, bool fsync);
  * The rest of the entries must have consecutive values (no gaps).
  * 
  * Each entry has an associated timestamp (distinct from 0). 
- * If no timestamp value is provided (0 value), logdb populates this 
- * field with milliseconds from epoch time. Otherwise, the meaning and 
- * units of this field are user-defined. Logdb verifies that the timestamp 
+ * If no timestamp value is provided (0 value), it is set to the current
+ * time (milliseconds from epoch time). Otherwise, the meaning and units
+ * of this field are user-defined. It is verified that the timestamp 
  * is equal to or greater than the timestamp of the preceding entry. 
  * It is legit for multiple records to have an identical timestamp 
  * because they were logged within the timestamp granularity.
@@ -401,4 +398,4 @@ long ldb_purge(ldb_db_t *obj, uint64_t seqnum);
 }
 #endif
 
-#endif /* LOGDB_H */
+#endif /* JOURNAL_H */

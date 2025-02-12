@@ -7,7 +7,7 @@
 #include <signal.h>
 #include <getopt.h>
 #include <pthread.h>
-#include "logdb.h"
+#include "journal.h"
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
@@ -159,7 +159,7 @@ static void * run_write(void *args)
     uint64_t time0 = get_millis();
     size_t num = 0;
 
-    // Logdb supports records of variable length.
+    // Journal supports records of variable length.
     // In this case we use fixed-length records filled with 0's
     // to avoid to deal with memory alloc and fill it with random content.
     for (size_t i = 0; i < num_entries; i++) {
@@ -274,7 +274,7 @@ static void help(void)
     const char *msg = \
         "usage: performance [OPTION]..." "\n" \
         "\n" \
-        "Tool used to test your logdb workload." "\n" \
+        "Tool used to test your journal workload." "\n" \
         "\n" \
         "Arguments:" "\n" \
         "   -h, --help                          Display this help and quit." "\n" \

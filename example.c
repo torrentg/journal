@@ -1,4 +1,4 @@
-#include "logdb.h"
+#include "journal.h"
 
 #include <time.h>
 #include <stdio.h>

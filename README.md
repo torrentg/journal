@@ -1,14 +1,17 @@
-# logdb
+# journal
 
-A simple log-structured database.
-It is an embeded database with no dependencies.
+A simple log-structured library for event-driven applications.
 
-Logdb is a simple database with the following characteristics:
+Journal is essentially an append-only data file (\*.dat) with an index file (\*.idx) used to speed up lookups.
+No complex data structures, no sofisticated algorithms, only basic file access.
+We rely on the filesystem cache (managed by the operating system) to ensure read performance.
+
+Main features:
 
 * Variable length record type
 * Records uniquely identified by a sequential number (seqnum)
 * Records are indexed by timestamp (monotonic non-decreasing field)
-* There are no other indexes other than seqnum and timestamp.
+* There are no other indexes other than seqnum and timestamp
 * Records can be appended, read, and searched
 * Records cannot be updated or deleted
 * Allows reverting the last entries (rollback)
@@ -16,17 +19,9 @@ Logdb is a simple database with the following characteristics:
 * Supports read-write concurrency (multi-thread)
 * Automatic data recovery in case of catastrofic events
 * Minimal memory footprint
+* No dependencies
 
-Use cases:
-
-* Storage engine in a raft library (fault-tolerant distributed applications)
-* Storage engine for journal-based apps
-
-## Description
-
-Logdb is essentially an append-only data file (\*.dat) with an index file (\*.idx) used to speed up lookups.
-No complex data structures, no sofisticated algorithms, only basic file access.
-We rely on the filesystem cache (managed by the operating system) to ensure read performance.
+## File format
 
 ### dat file format
 
@@ -51,10 +46,10 @@ We rely on the filesystem cache (managed by the operating system) to ensure read
 
 ## Usage
 
-Drop [`logdb.h`](logdb.h) and [`logdb.c`](logdb.c) into your project and start using it.
+Drop [`journal.h`](journal.h) and [`journal.c`](journal.c) into your project and start using it.
 
 ```c
-#include "logdb.h"
+#include "journal.h"
 
 ldb_db_t db = {0};
 ldb_entry_t wentries[MAX_ENTRIES] = {{0}};
@@ -74,7 +69,7 @@ ldb_free_entries(rentries, MAX_ENTRIES);
 ldb_close(&db);
 ```
 
-Read the function documentation in `logdb.h`.<br/>
+Read the function documentation in `journal.h`.<br/>
 See [`example.c`](example.c) for basic function usage.<br/>
 See [`performance.c`](performance.c) for concurrent usage.
 

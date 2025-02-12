@@ -10,7 +10,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/stat.h>
-#include "logdb.h"
+#include "journal.h"
 
 #define LDB_EXT_DAT             ".dat"
 #define LDB_EXT_IDX             ".idx"

@@ -8,16 +8,16 @@ TARGETS = tests example performance
 
 all: $(TARGETS)
 
-tests: tests.c logdb.h  logdb.c
+tests: tests.c journal.h  journal.c
 	$(CC) -g $(CFLAGS) -DRUNNING_ON_VALGRIND -o $@ tests.c $(LDFLAGS)
 
-example: example.c logdb.h logdb.c
-	$(CC) -g $(CFLAGS) -o $@ example.c logdb.c $(LDFLAGS)
+example: example.c journal.h journal.c
+	$(CC) -g $(CFLAGS) -o $@ example.c journal.c $(LDFLAGS)
 
-performance: performance.c logdb.h logdb.c
-	$(CC) -g $(CFLAGS) -o $@ performance.c logdb.c $(LDFLAGS)
+performance: performance.c journal.h journal.c
+	$(CC) -g $(CFLAGS) -o $@ performance.c journal.c $(LDFLAGS)
 
-coverage: tests.c logdb.h logdb.c
+coverage: tests.c journal.h journal.c
 	$(CC) --coverage -O0 $(CFLAGS) -o tests-coverage tests.c -lgcov $(LDFLAGS)
 	./tests-coverage
 	[ -d coverage ] || mkdir coverage
@@ -30,11 +30,11 @@ valgrind: tests
 helgrind: performance
 	valgrind --tool=helgrind --history-backtrace-size=50 ./performance --msw=1 --bpr=10KB --rpc=40 --msr=1 --rpq=100
 
-cppcheck: logdb.h logdb.c
-	cppcheck --enable=all  --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=checkersReport logdb.h logdb.c
+cppcheck: journal.h journal.c
+	cppcheck --enable=all  --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=checkersReport journal.h journal.c
 
 loc:
-	cloc logdb.h logdb.c tests.c example.c performance.c
+	cloc journal.h journal.c tests.c example.c performance.c
 
 clean: 
 	rm -f $(TARGETS)

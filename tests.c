@@ -1,7 +1,6 @@
 #include "acutest.h"
-
-#include "logdb.h"
-#include "logdb.c"
+#include "journal.h"
+#include "journal.c"
 
 void append_entries(ldb_db_t *db, uint64_t seqnum1, uint64_t seqnum2)
 {
