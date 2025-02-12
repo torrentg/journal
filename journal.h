@@ -1,7 +1,7 @@
 /*
 MIT License
 
-journal -- A simple log-structured library for event-driven applications.
+journal -- A simple log-structured library.
 <https://github.com/torrentg/journal>
 
 Copyright (c) 2024 Gerard Torrent <gerard@generacio.com>
@@ -33,7 +33,7 @@ SOFTWARE.
 #include <stdbool.h>
 
 /**
- * A simple log-structured library for event-driven applications.
+ * A simple log-structured library.
  * 
  * Journal is essentially an append-only data file (*.dat) with an index file (*.idx) used to speed up lookups.
  * No complex data structures, no sofisticated algorithms, only basic file access.
@@ -56,7 +56,7 @@ SOFTWARE.
  * dat file format
  * ---------------
  * 
- * Contains the database data.
+ * Contains the journal entries.
  * 
  * @see struct ldb_header_dat_t
  * @see struct ldb_record_dat_t
@@ -71,7 +71,7 @@ SOFTWARE.
  * idx file format
  * ---------------
  * 
- * Used to search database entries.
+ * Used to search for journal entries.
  * If idx file does not exist, it is rebuilt from the data.
  * 
  * @see struct ldb_header_idx_t
@@ -149,7 +149,7 @@ extern "C" {
 #endif
 
 struct ldb_impl_t;
-typedef struct ldb_impl_t ldb_db_t;
+typedef struct ldb_impl_t ldb_journal_t;
 
 typedef enum ldb_search_e {
     LDB_SEARCH_LOWER,             // Search for the first entry with a timestamp not less than the value.
@@ -219,64 +219,64 @@ void ldb_free_entry(ldb_entry_t *entry);
 void ldb_free_entries(ldb_entry_t *entries, size_t len);
 
 /**
- * Allocates a new ldb_db_t (opaque) object.
+ * Allocates a new ldb_journal_t (opaque) object.
  * 
  * @return Allocated object or NULL if no memory.
  */
-ldb_db_t * ldb_alloc(void);
+ldb_journal_t * ldb_alloc(void);
 
 /**
- * Deallocates a ldb_db_t object.
+ * Deallocates a ldb_journal_t object.
  * 
  * @param obj Object to deallocate.
  */
-void ldb_free(ldb_db_t *obj);
+void ldb_free(ldb_journal_t *obj);
 
 /**
- * Opens a database.
+ * Opens a journal.
  * 
- * Creates database files (dat+idx) if they do not exist.
+ * Creates the journal files (dat+idx) if they do not exist.
  * Updates the index file if incomplete (not flushed + crash).
  * Rebuilds the index file when corrupted or not found.
  * 
  * By default fsync flag is disabled. 
  * Use the function ldb_set_fsync_mode() to set it to true.
  * 
- * @param[in,out] obj Uninitialized database object.
- * @param[in] path Directory where database files are located.
- * @param[in] name Database name (allowed characters: [a-ZA-Z0-9_], max length = 32).
- * @param[in] check Check database files (true|false).
- * @return Error code (0 = OK). On error, the database is closed properly (ldb_close not required).
+ * @param[in,out] obj Uninitialized the journal object.
+ * @param[in] path Directory where journal files are located.
+ * @param[in] name Journal name (allowed characters: [a-ZA-Z0-9_], max length = 32).
+ * @param[in] check Check journal files (true|false).
+ * @return Error code (0 = OK). On error, the journal is closed properly (ldb_close not required).
  *         You can check the errno value to get additional error details.
  */
-int ldb_open(ldb_db_t *obj, const char *path, const char *name, bool check);
+int ldb_open(ldb_journal_t *obj, const char *path, const char *name, bool check);
 
 /**
- * Closes a database.
+ * Closes a journal.
  * 
  * Closes open files and releases allocated memory.
  * 
- * @param[in,out] obj Database to close.
+ * @param[in,out] obj Journal to close.
  * @return Return code (0 = OK).
  */
-int ldb_close(ldb_db_t *obj);
+int ldb_close(ldb_journal_t *obj);
 
 /**
- * Enables or disables the fsync mode for the database.
+ * Enables or disables the fsync mode for the journal.
  * 
- * When fsync mode is enabled, all data written to the database files is flushed to disk,
+ * When fsync mode is enabled, all data written to the journal files is flushed to disk,
  * ensuring that changes are persisted in case of a system crash or power failure.
  * When fsync mode is disabled, data may not be immediately flushed to disk, which can
  * improve performance but at the risk of data loss in case of a crash.
  * 
- * @param[in] obj Database to configure.
+ * @param[in] obj Journal to configure.
  * @param[in] fsync Mode to set (true=enable, false=disable).
  * @return Error code (0 = OK).
  */
-int ldb_set_fsync_mode(ldb_db_t *obj, bool fsync);
+int ldb_set_fsync_mode(ldb_journal_t *obj, bool fsync);
 
 /**
- * Appends entries to the database.
+ * Appends entries to the journal.
  * 
  * Entries are identified by their seqnum. 
  * First entry can have any seqnum distinct from 0.
@@ -308,8 +308,8 @@ int ldb_set_fsync_mode(ldb_db_t *obj, bool fsync);
  * 
  * Memory pointed to by entries is not modified and can be deallocated after the function call.
  * 
- * @param[in] obj Database to modify.
- * @param[in,out] entries Entries to append to the database. Memory pointed 
+ * @param[in] obj Journal to modify.
+ * @param[in,out] entries Entries to append to the journal. Memory pointed 
  *                  to by each entry is not modified. Seqnum and timestamp
  *                  are updated if they have value 0.
  *                  User must reset pointers before reuse.
@@ -317,12 +317,12 @@ int ldb_set_fsync_mode(ldb_db_t *obj, bool fsync);
  * @param[out] num Number of entries appended (can be NULL).
  * @return Error code (0 = OK).
  */
-int ldb_append(ldb_db_t *obj, ldb_entry_t *entries, size_t len, size_t *num);
+int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num);
 
 /**
  * Reads num entries starting from seqnum (included).
  * 
- * @param[in] obj Database to use.
+ * @param[in] obj Journal to use.
  * @param[in] seqnum Initial sequence number.
  * @param[out] entries Array of entries (min length = len).
  *                  These entries are uninitialized (with NULL pointers) or entries 
@@ -335,31 +335,31 @@ int ldb_append(ldb_db_t *obj, ldb_entry_t *entries, size_t len, size_t *num);
  *                  seqnum = 0.
  * @return Error code (0 = OK).
  */
-int ldb_read(ldb_db_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len, size_t *num);
+int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len, size_t *num);
 
 /**
  * Return statistics between seqnum1 and seqnum2 (both included).
  * 
- * @param[in] obj Database to use.
+ * @param[in] obj Journal to use.
  * @param[in] seqnum1 First sequence number.
  * @param[in] seqnum2 Second sequence number (greater than or equal to seqnum1).
  * @param[out] stats Uninitialized statistics.
  * @return Error code (0 = OK).
  */
-int ldb_stats(ldb_db_t *obj, uint64_t seqnum1, uint64_t seqnum2, ldb_stats_t *stats);
+int ldb_stats(ldb_journal_t *obj, uint64_t seqnum1, uint64_t seqnum2, ldb_stats_t *stats);
 
 /**
  * Searches for the seqnum corresponding to the given timestamp.
  * 
  * Uses the binary search algorithm over the index file.
  * 
- * @param[in] obj Database to use.
+ * @param[in] obj Journal to use.
  * @param[in] ts Timestamp to search.
  * @param[in] mode Search mode.
  * @param[out] seqnum Resulting seqnum (distinct from NULL, 0 = NOT_FOUND).
  * @return Error code (0 = OK).
  */
-int ldb_search(ldb_db_t *obj, uint64_t ts, ldb_search_e mode, uint64_t *seqnum);
+int ldb_search(ldb_journal_t *obj, uint64_t ts, ldb_search_e mode, uint64_t *seqnum);
 
 /**
  * Removes all entries greater than seqnum.
@@ -368,11 +368,11 @@ int ldb_search(ldb_db_t *obj, uint64_t ts, ldb_search_e mode, uint64_t *seqnum);
  *   - Index file is updated (zeroed top-to-bottom) and flushed.
  *   - Data file is updated (zeroed bottom-to-top) and flushed.
  * 
- * @param[in] obj Database to update.
+ * @param[in] obj Journal to update.
  * @param[in] seqnum Sequence number from which records are removed (seqnum=0 removes all content).
  * @return Number of removed entries, or error if negative.
  */
-long ldb_rollback(ldb_db_t *obj, uint64_t seqnum);
+long ldb_rollback(ldb_journal_t *obj, uint64_t seqnum);
 
 /**
  * Remove all entries less than seqnum.
@@ -388,11 +388,11 @@ long ldb_rollback(ldb_db_t *obj, uint64_t seqnum);
  *   - The dat file is opened
  *   - The idx file is rebuilt
  * 
- * @param[in] obj Database to update.
+ * @param[in] obj Journal to update.
  * @param[in] seqnum Sequence number up to which records are removed.
  * @return Number of removed entries, or error if negative.
  */
-long ldb_purge(ldb_db_t *obj, uint64_t seqnum);
+long ldb_purge(ldb_journal_t *obj, uint64_t seqnum);
 
 #ifdef __cplusplus
 }

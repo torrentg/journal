@@ -2,7 +2,7 @@
 #include "journal.h"
 #include "journal.c"
 
-void append_entries(ldb_db_t *db, uint64_t seqnum1, uint64_t seqnum2)
+void append_entries(ldb_journal_t *journal, uint64_t seqnum1, uint64_t seqnum2)
 {
     char metadata[128] = {0};
     char data[128] = {0};
@@ -27,7 +27,7 @@ void append_entries(ldb_db_t *db, uint64_t seqnum1, uint64_t seqnum2)
             .data = data
         };
 
-        TEST_ASSERT(ldb_append(db, &entry, 1, NULL) == LDB_OK);
+        TEST_ASSERT(ldb_append(journal, &entry, 1, NULL) == LDB_OK);
 
         seqnum1++;
     }
@@ -164,101 +164,101 @@ void test_create_filename(void)
 
 void test_close(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     TEST_ASSERT(ldb_close(NULL) == LDB_OK);
-    TEST_ASSERT(ldb_close(&db) == LDB_OK);
+    TEST_ASSERT(ldb_close(&journal) == LDB_OK);
 
-    db.name = (char *) malloc(10);
-    db.path = (char *) malloc(10);
-    db.dat_path = (char *) malloc(10);
-    db.idx_path = (char *) malloc(10);
-    db.dat_fp = NULL;
-    db.idx_fp = NULL;
+    journal.name = (char *) malloc(10);
+    journal.path = (char *) malloc(10);
+    journal.dat_path = (char *) malloc(10);
+    journal.idx_path = (char *) malloc(10);
+    journal.dat_fp = NULL;
+    journal.idx_fp = NULL;
 
-    TEST_ASSERT(ldb_close(&db) == LDB_OK);
-    TEST_ASSERT(db.name == NULL);
-    TEST_ASSERT(db.path == NULL);
-    TEST_ASSERT(db.dat_path == NULL);
-    TEST_ASSERT(db.idx_path == NULL);
-    TEST_ASSERT(db.dat_fp == NULL);
-    TEST_ASSERT(db.idx_fp == NULL);
+    TEST_ASSERT(ldb_close(&journal) == LDB_OK);
+    TEST_ASSERT(journal.name == NULL);
+    TEST_ASSERT(journal.path == NULL);
+    TEST_ASSERT(journal.dat_path == NULL);
+    TEST_ASSERT(journal.idx_path == NULL);
+    TEST_ASSERT(journal.dat_fp == NULL);
+    TEST_ASSERT(journal.idx_fp == NULL);
 }
 
 void test_open_invalid_args(void) {
-    ldb_db_t db = {0};
-    TEST_ASSERT(ldb_open(&db , NULL   , "test", false) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_open(&db , "/tmp/",  NULL , false) == LDB_ERR_ARG);
+    ldb_journal_t journal = {0};
+    TEST_ASSERT(ldb_open(&journal , NULL   , "test", false) == LDB_ERR_ARG);
+    TEST_ASSERT(ldb_open(&journal , "/tmp/",  NULL , false) == LDB_ERR_ARG);
     TEST_ASSERT(ldb_open(NULL, "/tmp/", "test", false) == LDB_ERR_ARG);
 }
 
 void test_open_invalid_path(void) {
-    ldb_db_t db = {0};
-    TEST_ASSERT(ldb_open(&db, "/etc/passwd/", "test", false) == LDB_ERR_PATH);
-    TEST_ASSERT(ldb_open(&db, "/non_existent_path/", "test", false) == LDB_ERR_PATH);
+    ldb_journal_t journal = {0};
+    TEST_ASSERT(ldb_open(&journal, "/etc/passwd/", "test", false) == LDB_ERR_PATH);
+    TEST_ASSERT(ldb_open(&journal, "/non_existent_path/", "test", false) == LDB_ERR_PATH);
 }
 
 void test_open_invalid_name(void) {
-    ldb_db_t db = {0};
-    TEST_ASSERT(ldb_open(&db, "/tmp/", "", false) == LDB_ERR_NAME);
-    TEST_ASSERT(ldb_open(&db, "/tmp/", ".", false) == LDB_ERR_NAME);
-    TEST_ASSERT(ldb_open(&db, "/tmp/", "xxx-3", false) == LDB_ERR_NAME);
-    TEST_ASSERT(ldb_open(&db, "/tmp/", "xxx?", false) == LDB_ERR_NAME);
-    TEST_ASSERT(ldb_open(&db, "/tmp/", "too_long_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", false) == LDB_ERR_NAME);
+    ldb_journal_t journal = {0};
+    TEST_ASSERT(ldb_open(&journal, "/tmp/", "", false) == LDB_ERR_NAME);
+    TEST_ASSERT(ldb_open(&journal, "/tmp/", ".", false) == LDB_ERR_NAME);
+    TEST_ASSERT(ldb_open(&journal, "/tmp/", "xxx-3", false) == LDB_ERR_NAME);
+    TEST_ASSERT(ldb_open(&journal, "/tmp/", "xxx?", false) == LDB_ERR_NAME);
+    TEST_ASSERT(ldb_open(&journal, "/tmp/", "too_long_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", false) == LDB_ERR_NAME);
 }
 
-void test_open_create_db(void)
+void test_open_create(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    TEST_ASSERT(db.name != NULL && strcmp(db.name, "test") == 0);
-    TEST_ASSERT(db.path != NULL && strcmp(db.path, "") == 0);
-    TEST_ASSERT(db.dat_path != NULL && strcmp(db.dat_path, "test.dat") == 0);
-    TEST_ASSERT(db.idx_path != NULL && strcmp(db.idx_path, "test.idx") == 0);
-    TEST_ASSERT(db.dat_fp != NULL);
-    TEST_ASSERT(db.idx_fp != NULL);
-    TEST_ASSERT(db.state.seqnum1 == 0);
-    TEST_ASSERT(db.state.timestamp1 == 0);
-    TEST_ASSERT(db.state.seqnum2 == 0);
-    TEST_ASSERT(db.state.timestamp2 == 0);
-    TEST_ASSERT(db.dat_end == sizeof(ldb_header_dat_t));
-    ldb_close(&db);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    TEST_ASSERT(journal.name != NULL && strcmp(journal.name, "test") == 0);
+    TEST_ASSERT(journal.path != NULL && strcmp(journal.path, "") == 0);
+    TEST_ASSERT(journal.dat_path != NULL && strcmp(journal.dat_path, "test.dat") == 0);
+    TEST_ASSERT(journal.idx_path != NULL && strcmp(journal.idx_path, "test.idx") == 0);
+    TEST_ASSERT(journal.dat_fp != NULL);
+    TEST_ASSERT(journal.idx_fp != NULL);
+    TEST_ASSERT(journal.state.seqnum1 == 0);
+    TEST_ASSERT(journal.state.timestamp1 == 0);
+    TEST_ASSERT(journal.state.seqnum2 == 0);
+    TEST_ASSERT(journal.state.timestamp2 == 0);
+    TEST_ASSERT(journal.dat_end == sizeof(ldb_header_dat_t));
+    ldb_close(&journal);
 }
 
-void test_open_empty_db(void)
+void test_open_empty(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    // create db
+    // create journal
     ldb_create_file_dat("test.dat");
 
-    // open empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    TEST_ASSERT(db.name != NULL && strcmp(db.name, "test") == 0);
-    TEST_ASSERT(db.path != NULL && strcmp(db.path, "") == 0);
-    TEST_ASSERT(db.dat_path != NULL && strcmp(db.dat_path, "test.dat") == 0);
-    TEST_ASSERT(db.idx_path != NULL && strcmp(db.idx_path, "test.idx") == 0);
-    TEST_ASSERT(db.dat_fp != NULL);
-    TEST_ASSERT(db.idx_fp != NULL);
-    TEST_ASSERT(db.state.seqnum1 == 0);
-    TEST_ASSERT(db.state.timestamp1 == 0);
-    TEST_ASSERT(db.state.seqnum2 == 0);
-    TEST_ASSERT(db.state.timestamp2 == 0);
-    TEST_ASSERT(db.dat_end == sizeof(ldb_header_dat_t));
-    ldb_close(&db);
+    // open empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    TEST_ASSERT(journal.name != NULL && strcmp(journal.name, "test") == 0);
+    TEST_ASSERT(journal.path != NULL && strcmp(journal.path, "") == 0);
+    TEST_ASSERT(journal.dat_path != NULL && strcmp(journal.dat_path, "test.dat") == 0);
+    TEST_ASSERT(journal.idx_path != NULL && strcmp(journal.idx_path, "test.idx") == 0);
+    TEST_ASSERT(journal.dat_fp != NULL);
+    TEST_ASSERT(journal.idx_fp != NULL);
+    TEST_ASSERT(journal.state.seqnum1 == 0);
+    TEST_ASSERT(journal.state.timestamp1 == 0);
+    TEST_ASSERT(journal.state.seqnum2 == 0);
+    TEST_ASSERT(journal.state.timestamp2 == 0);
+    TEST_ASSERT(journal.dat_end == sizeof(ldb_header_dat_t));
+    ldb_close(&journal);
 }
 
 void test_open_invl_dat_header(void)
 {
     FILE *fp = NULL;
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_header_dat_t header = {
         .magic_number = LDB_MAGIC_NUMBER,
         .format = LDB_FORMAT_1,
@@ -271,14 +271,14 @@ void test_open_invl_dat_header(void)
     // empty file
     fp = fopen("test.dat", "w");
     fclose(fp);
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_ERR_FMT_DAT);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_ERR_FMT_DAT);
 
     // invalid magic numer
     fp = fopen("test.dat", "w");
     header.magic_number = 123;
     fwrite(&header, sizeof(ldb_header_dat_t), 1, fp);
     fclose(fp);
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_ERR_FMT_DAT);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_ERR_FMT_DAT);
 
     // invalid file format
     fp = fopen("test.dat", "w");
@@ -286,57 +286,57 @@ void test_open_invl_dat_header(void)
     header.format = LDB_FORMAT_1 + 1;
     fwrite(&header, sizeof(ldb_header_dat_t), 1, fp);
     fclose(fp);
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_ERR_FMT_DAT);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_ERR_FMT_DAT);
 }
 
 void test_open_and_repair_1(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_record_dat_t record = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // writing invalid data (first record too short)
     const char garbage[] = "ioscm,nswddljkh";
-    fwrite(garbage, sizeof(garbage), 1, db.dat_fp);
-    ldb_close(&db);
+    fwrite(garbage, sizeof(garbage), 1, journal.dat_fp);
+    ldb_close(&journal);
 
     // incomplete record is zeroized
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    ldb_close(&db);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    ldb_close(&journal);
 
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
     // writing invalid first record
     record.seqnum = 1;
     record.timestamp = 0;
     record.data_len = 1000;    // has data length but data not added after record
     record.metadata_len = 54;  // has data length but data not added after record
-    fwrite(&record, sizeof(ldb_record_dat_t), 1, db.dat_fp);
-    ldb_close(&db);
+    fwrite(&record, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
+    ldb_close(&journal);
 
     // first entry zeroized
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    TEST_ASSERT(db.state.seqnum1 == 0);
-    ldb_close(&db);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    TEST_ASSERT(journal.state.seqnum1 == 0);
+    ldb_close(&journal);
 }
 
 void test_open_and_repair_2(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // inserting 1 valid entry
     const char data[32000] = {0};
@@ -348,7 +348,7 @@ void test_open_and_repair_2(void)
         .metadata = (char *) data,
         .data = (char *) data + 10
     };
-    TEST_ASSERT(ldb_append(&db, &entry, 1, NULL) == LDB_OK);
+    TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_OK);
 
     // inserting a partially zeroized entry
     ldb_record_dat_t record = {
@@ -357,29 +357,29 @@ void test_open_and_repair_2(void)
         .metadata_len = 40,
         .data_len = 400,
     };
-    fwrite(&record, sizeof(ldb_record_dat_t), 1, db.dat_fp);
+    fwrite(&record, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
 
     // inserting garbage
     const char garbage[] = "ioscm,nswddljk";
-    fwrite(&garbage, sizeof(garbage), 1, db.dat_fp);
-    ldb_close(&db);
+    fwrite(&garbage, sizeof(garbage), 1, journal.dat_fp);
+    ldb_close(&journal);
 
     // incomplete record is zeroized
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    TEST_ASSERT(db.state.seqnum2 == 10);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    TEST_ASSERT(journal.state.seqnum2 == 10);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 }
 
 void test_open_and_repair_3(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // inserting 1 valid entry
     const char data[1024] = {0};
@@ -391,7 +391,7 @@ void test_open_and_repair_3(void)
         .metadata = (char *) data,
         .data = (char *) data + 40
     };
-    TEST_ASSERT(ldb_append(&db, &entry, 1, NULL) == LDB_OK);
+    TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_OK);
 
     // inserting 1 'valid' entry with invalid data length
     ldb_record_dat_t record = {
@@ -401,26 +401,26 @@ void test_open_and_repair_3(void)
         .data_len = 400,
         .checksum = 999       // invalid but checked after data length
     };
-    fwrite(&record, sizeof(ldb_record_dat_t), 1, db.dat_fp);
-    fwrite(data, record.metadata_len + record.data_len - 10, 1, db.dat_fp);
-    ldb_close(&db);
+    fwrite(&record, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
+    fwrite(data, record.metadata_len + record.data_len - 10, 1, journal.dat_fp);
+    ldb_close(&journal);
 
     // second record (incomplete) is zeroized
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    TEST_ASSERT(db.state.seqnum2 == 10);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    TEST_ASSERT(journal.state.seqnum2 == 10);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 }
 
 void test_open_1_entry_ok(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // inserting 1 entry
     const char metadata[] = "metadata-1";
@@ -433,56 +433,56 @@ void test_open_1_entry_ok(void)
         .metadata = (char *) metadata,
         .data = (char *) data
     };
-    TEST_ASSERT(ldb_append(&db, &entry, 1, NULL) == LDB_OK);
-    ldb_close(&db);
+    TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_OK);
+    ldb_close(&journal);
 
-    // open db with 1-entry (idx will be rebuild)
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    TEST_ASSERT(db.state.seqnum1 == 10);
-    TEST_ASSERT(db.state.timestamp1 == 3);
-    TEST_ASSERT(db.state.seqnum2 == 10);
-    TEST_ASSERT(db.state.timestamp2 == 3);
-    TEST_ASSERT(db.dat_end == sizeof(ldb_header_dat_t) + sizeof(ldb_record_dat_t) + entry.metadata_len + entry.data_len);
-    ldb_close(&db);
+    // open journal with 1-entry (idx will be rebuild)
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    TEST_ASSERT(journal.state.seqnum1 == 10);
+    TEST_ASSERT(journal.state.timestamp1 == 3);
+    TEST_ASSERT(journal.state.seqnum2 == 10);
+    TEST_ASSERT(journal.state.timestamp2 == 3);
+    TEST_ASSERT(journal.dat_end == sizeof(ldb_header_dat_t) + sizeof(ldb_record_dat_t) + entry.metadata_len + entry.data_len);
+    ldb_close(&journal);
 
-    // open db with 1-entry (idx no rebuilded)
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    ldb_close(&db);
+    // open journal with 1-entry (idx no rebuilded)
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    ldb_close(&journal);
 }
 
 void test_open_1_entry_empty(void)
 {
     const char data[128] = {0};
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_record_dat_t record = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // inserting 1 entry (empty)
-    fwrite(&record, sizeof(ldb_record_dat_t), 1, db.dat_fp);
+    fwrite(&record, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
 
     // inserting additional empty content
-    fwrite(data, sizeof(data), 1, db.dat_fp);
-    ldb_close(&db);
+    fwrite(data, sizeof(data), 1, journal.dat_fp);
+    ldb_close(&journal);
 
-    // open db with 1-entry (idx will be rebuild)
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    TEST_ASSERT(db.state.seqnum1 == 0);
-    TEST_ASSERT(db.state.timestamp1 == 0);
-    TEST_ASSERT(db.state.seqnum2 == 0);
-    TEST_ASSERT(db.state.timestamp2 == 0);
-    TEST_ASSERT(db.dat_end == sizeof(ldb_header_dat_t));
-    ldb_close(&db);
+    // open journal with 1-entry (idx will be rebuild)
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    TEST_ASSERT(journal.state.seqnum1 == 0);
+    TEST_ASSERT(journal.state.timestamp1 == 0);
+    TEST_ASSERT(journal.state.seqnum2 == 0);
+    TEST_ASSERT(journal.state.timestamp2 == 0);
+    TEST_ASSERT(journal.dat_end == sizeof(ldb_header_dat_t));
+    ldb_close(&journal);
 }
 
 void _test_open_rollbacked_ok(bool check)
 {
     char data[1024] = {0};
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_record_dat_t record_dat = {0};
     ldb_record_idx_t record_idx = {0};
     uint32_t checksum = 0;
@@ -490,8 +490,8 @@ void _test_open_rollbacked_ok(bool check)
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // inserting 4 entries
     for(int i = 10; i < 14; i++)
@@ -505,27 +505,27 @@ void _test_open_rollbacked_ok(bool check)
 
         record_idx.seqnum = record_dat.seqnum;
         record_idx.timestamp = record_dat.timestamp;
-        record_idx.pos = ftell(db.dat_fp);
+        record_idx.pos = ftell(journal.dat_fp);
 
-        fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, db.dat_fp);
-        fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, db.dat_fp);
+        fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
+        fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
 
-        fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, db.idx_fp);
+        fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, journal.idx_fp);
     }
 
     // inserting rollbacked info
     memset(data, 0x00, sizeof(data));
-    fwrite(data, 60, 1, db.dat_fp);
-    fwrite(data, 37, 1, db.idx_fp);
-    ldb_close(&db);
+    fwrite(data, 60, 1, journal.dat_fp);
+    fwrite(data, 37, 1, journal.idx_fp);
+    ldb_close(&journal);
 
-    // open database
-    TEST_ASSERT(ldb_open(&db, "", "test", check) == LDB_OK);
-    TEST_ASSERT(db.state.seqnum1 == 10);
-    TEST_ASSERT(db.state.timestamp1 == 1010);
-    TEST_ASSERT(db.state.seqnum2 == 13);
-    TEST_ASSERT(db.state.timestamp2 == 1013);
-    ldb_close(&db);
+    // open journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", check) == LDB_OK);
+    TEST_ASSERT(journal.state.seqnum1 == 10);
+    TEST_ASSERT(journal.state.timestamp1 == 1010);
+    TEST_ASSERT(journal.state.seqnum2 == 13);
+    TEST_ASSERT(journal.state.timestamp2 == 1013);
+    ldb_close(&journal);
 }
 
 void test_open_rollbacked_ok_check(void) {
@@ -539,15 +539,15 @@ void test_open_rollbacked_ok_uncheck(void) {
 void test_open_dat_check_fails(void)
 {
     const char data[1024] = {0};
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_record_dat_t record_dat = {0};
     uint32_t checksum = 0;
 
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // inserting entry-1
     record_dat.seqnum = 10;
@@ -556,8 +556,8 @@ void test_open_dat_check_fails(void)
     record_dat.data_len = 20;
     checksum = ldb_checksum_record(&record_dat);
     record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum);
-    fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, db.dat_fp);
-    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, db.dat_fp);
+    fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
+    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
 
     // inserting entry-2 (broken sequence)
     record_dat.seqnum = 16;
@@ -566,27 +566,27 @@ void test_open_dat_check_fails(void)
     record_dat.data_len = 20;
     checksum = ldb_checksum_record(&record_dat);
     record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum);
-    fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, db.dat_fp);
-    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, db.dat_fp);
+    fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
+    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 
-    // open database
-    TEST_ASSERT(ldb_open(&db, "", "test", true) == LDB_ERR_FMT_DAT);
+    // open journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", true) == LDB_ERR_FMT_DAT);
 }
 
 void test_open_dat_corrupted(void)
 {
     const char data[1024] = {0};
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_record_dat_t record_dat = {0};
     uint32_t checksum = 0;
 
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // inserting entry-1
     record_dat.seqnum = 10;
@@ -595,8 +595,8 @@ void test_open_dat_corrupted(void)
     record_dat.data_len = 20;
     checksum = ldb_checksum_record(&record_dat);
     record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum);
-    fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, db.dat_fp);
-    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, db.dat_fp);
+    fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
+    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
 
     // inserting entry-2 (incorrect checksum)
     record_dat.seqnum = 11;
@@ -605,19 +605,19 @@ void test_open_dat_corrupted(void)
     record_dat.data_len = 20;
     checksum = ldb_checksum_record(&record_dat);
     record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum) + 999;
-    fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, db.dat_fp);
-    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, db.dat_fp);
+    fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
+    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 
-    // open database
-    TEST_ASSERT(ldb_open(&db, "", "test", true) == LDB_ERR_CHECKSUM);
+    // open journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", true) == LDB_ERR_CHECKSUM);
 }
 
 void test_open_idx_check_fails_1(void)
 {
     const char data[1024] = {0};
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_record_dat_t record_dat = {0};
     ldb_record_idx_t record_idx = {0};
     uint32_t checksum = 0;
@@ -625,8 +625,8 @@ void test_open_idx_check_fails_1(void)
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // inserting 4 entries
     for(int i = 10; i < 14; i++)
@@ -640,28 +640,28 @@ void test_open_idx_check_fails_1(void)
 
         record_idx.seqnum = record_dat.seqnum + (i == 12 ? 5 : 0); // seqnum mismatch
         record_idx.timestamp = record_dat.timestamp;
-        record_idx.pos = ftell(db.dat_fp);
+        record_idx.pos = ftell(journal.dat_fp);
 
-        fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, db.dat_fp);
-        fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, db.dat_fp);
+        fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
+        fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
 
-        fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, db.idx_fp);
+        fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, journal.idx_fp);
     }
-    ldb_close(&db);
+    ldb_close(&journal);
 
-    // open database (finish OK due to idx rebuild)
-    TEST_ASSERT(ldb_open(&db, "", "test", true) == LDB_OK);
-    TEST_ASSERT(db.state.seqnum1 == 10);
-    TEST_ASSERT(db.state.timestamp1 == 1010);
-    TEST_ASSERT(db.state.seqnum2 == 13);
-    TEST_ASSERT(db.state.timestamp2 == 1013);
-    ldb_close(&db);
+    // open journal (finish OK due to idx rebuild)
+    TEST_ASSERT(ldb_open(&journal, "", "test", true) == LDB_OK);
+    TEST_ASSERT(journal.state.seqnum1 == 10);
+    TEST_ASSERT(journal.state.timestamp1 == 1010);
+    TEST_ASSERT(journal.state.seqnum2 == 13);
+    TEST_ASSERT(journal.state.timestamp2 == 1013);
+    ldb_close(&journal);
 }
 
 void test_open_idx_check_fails_2(void)
 {
     char data[1024] = {0};
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_record_dat_t record_dat = {0};
     ldb_record_idx_t record_idx = {0};
     uint32_t checksum = 0;
@@ -669,8 +669,8 @@ void test_open_idx_check_fails_2(void)
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // inserting 4 entries
     for(int i = 10; i < 14; i++)
@@ -684,22 +684,22 @@ void test_open_idx_check_fails_2(void)
 
         record_idx.seqnum = record_dat.seqnum;
         record_idx.timestamp = record_dat.timestamp;
-        record_idx.pos = ftell(db.dat_fp) + (i == 12 ? 5 : 0); // invalid pos
+        record_idx.pos = ftell(journal.dat_fp) + (i == 12 ? 5 : 0); // invalid pos
 
-        fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, db.dat_fp);
-        fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, db.dat_fp);
+        fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
+        fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
 
-        fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, db.idx_fp);
+        fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, journal.idx_fp);
     }
-    ldb_close(&db);
+    ldb_close(&journal);
 
-    // open database (finish OK due to idx rebuild)
-    TEST_ASSERT(ldb_open(&db, "", "test", true) == LDB_OK);
-    TEST_ASSERT(db.state.seqnum1 == 10);
-    TEST_ASSERT(db.state.timestamp1 == 1010);
-    TEST_ASSERT(db.state.seqnum2 == 13);
-    TEST_ASSERT(db.state.timestamp2 == 1013);
-    ldb_close(&db);
+    // open journal (finish OK due to idx rebuild)
+    TEST_ASSERT(ldb_open(&journal, "", "test", true) == LDB_OK);
+    TEST_ASSERT(journal.state.seqnum1 == 10);
+    TEST_ASSERT(journal.state.timestamp1 == 1010);
+    TEST_ASSERT(journal.state.seqnum2 == 13);
+    TEST_ASSERT(journal.state.timestamp2 == 1013);
+    ldb_close(&journal);
 }
 
 void test_alloc_free_entry(void)
@@ -791,36 +791,36 @@ void test_alloc_free_entries(void)
 
 void test_append_invalid_args(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_entry_t entry = {0};
 
     TEST_ASSERT(ldb_append(NULL, &entry, 1, NULL) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_append(&db, NULL, 1, NULL) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_append(&db, &entry, 1, NULL) == LDB_ERR);
+    TEST_ASSERT(ldb_append(&journal, NULL, 1, NULL) == LDB_ERR_ARG);
+    TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_ERR);
 }
 
 void test_append_nothing(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_entry_t entries[10];
     size_t num = 0;
 
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // append 0 entries
-    TEST_ASSERT(ldb_append(&db, entries, 0, &num) == LDB_OK);
+    TEST_ASSERT(ldb_append(&journal, entries, 0, &num) == LDB_OK);
     TEST_ASSERT(num == 0);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 }
 
 void test_append_auto(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     const size_t len = 3;
     ldb_entry_t entries[len];
     char buf[1024] = {0};
@@ -829,8 +829,8 @@ void test_append_auto(void)
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // create entries
     for (size_t i = 0; i < len; i++) {
@@ -845,10 +845,10 @@ void test_append_auto(void)
     }
 
     // append 3 entries
-    TEST_ASSERT(ldb_append(&db, entries, len, &num) == LDB_OK);
+    TEST_ASSERT(ldb_append(&journal, entries, len, &num) == LDB_OK);
     TEST_ASSERT(num == len);
-    TEST_ASSERT(db.state.seqnum1 == 1);
-    TEST_ASSERT(db.state.seqnum2 == len);
+    TEST_ASSERT(journal.state.seqnum1 == 1);
+    TEST_ASSERT(journal.state.seqnum2 == len);
     TEST_ASSERT(entries[0].seqnum == 1);
     TEST_ASSERT(entries[1].seqnum == 2);
     TEST_ASSERT(entries[2].seqnum == 3);
@@ -861,10 +861,10 @@ void test_append_auto(void)
         entries[i].seqnum = 0;
         entries[i].timestamp = 0;
     }
-    TEST_ASSERT(ldb_append(&db, entries, len, &num) == LDB_OK);
+    TEST_ASSERT(ldb_append(&journal, entries, len, &num) == LDB_OK);
     TEST_ASSERT(num == len);
-    TEST_ASSERT(db.state.seqnum1 == 1);
-    TEST_ASSERT(db.state.seqnum2 == 2*len);
+    TEST_ASSERT(journal.state.seqnum1 == 1);
+    TEST_ASSERT(journal.state.seqnum2 == 2*len);
     TEST_ASSERT(entries[0].seqnum == 4);
     TEST_ASSERT(entries[1].seqnum == 5);
     TEST_ASSERT(entries[2].seqnum == 6);
@@ -872,7 +872,7 @@ void test_append_auto(void)
     TEST_ASSERT(entries[1].timestamp > 0);
     TEST_ASSERT(entries[2].timestamp > 0);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 
     // dealloc entries ()
     for (size_t i = 0; i < len; i++) {
@@ -883,7 +883,7 @@ void test_append_auto(void)
 
 void test_append_nominal_case(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     const size_t len = 10;
     ldb_entry_t entries[len];
     char buf[1024] = {0};
@@ -892,8 +892,8 @@ void test_append_nominal_case(void)
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // create entries
     for (size_t i = 0; i < len; i++) {
@@ -907,12 +907,12 @@ void test_append_nominal_case(void)
         entries[i].data_len = strlen(buf) + 1;
     }
 
-    TEST_ASSERT(ldb_append(&db, entries, len, &num) == LDB_OK);
+    TEST_ASSERT(ldb_append(&journal, entries, len, &num) == LDB_OK);
     TEST_ASSERT(num == len);
-    TEST_ASSERT(db.state.seqnum1 == 10);
-    TEST_ASSERT(db.state.seqnum2 == 10 + len - 1);
+    TEST_ASSERT(journal.state.seqnum1 == 10);
+    TEST_ASSERT(journal.state.seqnum2 == 10 + len - 1);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 
     // dealloc entries ()
     for (size_t i = 0; i < len; i++) {
@@ -923,7 +923,7 @@ void test_append_nominal_case(void)
 
 void test_append_broken_sequence(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     const size_t len = 10;
     ldb_entry_t entries[len];
     char buf[1024] = {0};
@@ -932,8 +932,8 @@ void test_append_broken_sequence(void)
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // create entries
     for (size_t i = 0; i < len; i++) {
@@ -947,12 +947,12 @@ void test_append_broken_sequence(void)
         entries[i].data_len = strlen(buf) + 1;
     }
 
-    TEST_ASSERT(ldb_append(&db, entries, len, &num) == LDB_ERR_ENTRY_SEQNUM);
+    TEST_ASSERT(ldb_append(&journal, entries, len, &num) == LDB_ERR_ENTRY_SEQNUM);
     TEST_ASSERT(num == 5);
-    TEST_ASSERT(db.state.seqnum1 == 10);
-    TEST_ASSERT(db.state.seqnum2 == 10 + num - 1);
+    TEST_ASSERT(journal.state.seqnum1 == 10);
+    TEST_ASSERT(journal.state.seqnum2 == 10 + num - 1);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 
     // dealloc entries ()
     for (size_t i = 0; i < len; i++) {
@@ -963,7 +963,7 @@ void test_append_broken_sequence(void)
 
 void test_append_lack_of_data(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_entry_t entry = {
         .seqnum = 10,
         .timestamp = 1000,
@@ -976,17 +976,17 @@ void test_append_lack_of_data(void)
     remove("test.dat");
     remove("test.idx");
 
-    // create empty db
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    // create empty journal
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
     entry.metadata_len = 40;
 
-    TEST_ASSERT(ldb_append(&db, &entry, 1, NULL) == LDB_ERR_ENTRY_METADATA);
+    TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_ERR_ENTRY_METADATA);
     entry.metadata_len = 0;
     entry.data_len = 40;
 
-    TEST_ASSERT(ldb_append(&db, &entry, 1, NULL) == LDB_ERR_ENTRY_DATA);
+    TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_ERR_ENTRY_DATA);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 }
 
 bool check_entry(ldb_entry_t *entry, uint64_t seqnum, const char *metadata, const char *data)
@@ -1001,369 +1001,369 @@ bool check_entry(ldb_entry_t *entry, uint64_t seqnum, const char *metadata, cons
 
 void test_read_invalid_args(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_entry_t entries[3] = {{0}};
 
     TEST_ASSERT(ldb_read(NULL, 1, entries, 3, NULL) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_read(&db, 1, NULL, 3, NULL) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_read(&db, 1, entries, 0, NULL) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_read(&db, 1, entries, 3, NULL) == LDB_ERR);
+    TEST_ASSERT(ldb_read(&journal, 1, NULL, 3, NULL) == LDB_ERR_ARG);
+    TEST_ASSERT(ldb_read(&journal, 1, entries, 0, NULL) == LDB_ERR_ARG);
+    TEST_ASSERT(ldb_read(&journal, 1, entries, 3, NULL) == LDB_ERR);
 }
 
-void test_read_empty_db(void)
+void test_read_empty(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_entry_t entries[3] = {{0}};
     size_t num = 10;
 
     remove("test.dat");
     remove("test.idx");
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
     entries[0].seqnum = 5;
     entries[1].seqnum = 15;
     entries[2].seqnum = 25;
 
-    TEST_ASSERT(ldb_read(&db, 0, entries, 3, &num) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_read(&journal, 0, entries, 3, &num) == LDB_ERR_NOT_FOUND);
     TEST_ASSERT(num == 0);
 
-    TEST_ASSERT(ldb_read(&db, 2, entries, 3, &num) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_read(&journal, 2, entries, 3, &num) == LDB_ERR_NOT_FOUND);
     TEST_ASSERT(num == 0);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 }
 
 void test_read_nominal_case(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_entry_t entries[10] = {{0}};
     size_t num = 0;
 
     remove("test.dat");
     remove("test.idx");
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    append_entries(&db, 20, 314);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    append_entries(&journal, 20, 314);
 
-    TEST_ASSERT(ldb_read(&db, 0, entries, 3, &num) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_read(&journal, 0, entries, 3, &num) == LDB_ERR_NOT_FOUND);
     TEST_ASSERT(num == 0);
 
-    TEST_ASSERT(ldb_read(&db, 10, entries, 3, &num) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_read(&journal, 10, entries, 3, &num) == LDB_ERR_NOT_FOUND);
     TEST_ASSERT(num == 0);
 
-    TEST_ASSERT(ldb_read(&db, 20, entries, 3, &num) == LDB_OK);
+    TEST_ASSERT(ldb_read(&journal, 20, entries, 3, &num) == LDB_OK);
     TEST_ASSERT(num == 3);
     TEST_ASSERT(check_entry(&entries[0], 20, "metadata-20", "data-20"));
     TEST_ASSERT(check_entry(&entries[1], 21, "metadata-21", "data-21"));
     TEST_ASSERT(check_entry(&entries[2], 22, "metadata-22", "data-22"));
 
-    TEST_ASSERT(ldb_read(&db, 40, entries, 2, &num) == LDB_OK);
+    TEST_ASSERT(ldb_read(&journal, 40, entries, 2, &num) == LDB_OK);
     TEST_ASSERT(num == 2);
     TEST_ASSERT(check_entry(&entries[0], 40, "metadata-40", "data-40"));
     TEST_ASSERT(check_entry(&entries[1], 41, "metadata-41", "data-41"));
 
-    TEST_ASSERT(ldb_read(&db, 313, entries, 3, &num) == LDB_OK);
+    TEST_ASSERT(ldb_read(&journal, 313, entries, 3, &num) == LDB_OK);
     TEST_ASSERT(num == 2);
     TEST_ASSERT(check_entry(&entries[0], 313, "metadata-313", "data-313"));
     TEST_ASSERT(check_entry(&entries[1], 314, "metadata-314", "data-314"));
 
-    TEST_ASSERT(ldb_read(&db, 400, entries, 3, &num) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_read(&journal, 400, entries, 3, &num) == LDB_ERR_NOT_FOUND);
     TEST_ASSERT(num == 0);
 
     ldb_free_entries(entries, 3);
-    ldb_close(&db);
+    ldb_close(&journal);
 }
 
 void test_stats_invalid_args(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_stats_t stats = {0};
 
     TEST_ASSERT(ldb_stats(NULL, 1, 1000, &stats) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_stats(&db, 1, 1000, NULL) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_stats(&db, 99, 1, &stats) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_stats(&db, 1, 1000, &stats) == LDB_ERR);
+    TEST_ASSERT(ldb_stats(&journal, 1, 1000, NULL) == LDB_ERR_ARG);
+    TEST_ASSERT(ldb_stats(&journal, 99, 1, &stats) == LDB_ERR_ARG);
+    TEST_ASSERT(ldb_stats(&journal, 1, 1000, &stats) == LDB_ERR);
 }
 
 void test_stats_nominal_case(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_stats_t stats = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    append_entries(&db, 20, 314);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    append_entries(&journal, 20, 314);
 
-    TEST_ASSERT(ldb_stats(&db, 10, 15, &stats) == LDB_OK);
+    TEST_ASSERT(ldb_stats(&journal, 10, 15, &stats) == LDB_OK);
     TEST_ASSERT(stats.min_seqnum == 0);
     TEST_ASSERT(stats.max_seqnum == 0);
     TEST_ASSERT(stats.num_entries == 0);
     TEST_ASSERT(stats.index_size == 0);
 
-    TEST_ASSERT(ldb_stats(&db, 900, 1000, &stats) == LDB_OK);
+    TEST_ASSERT(ldb_stats(&journal, 900, 1000, &stats) == LDB_OK);
     TEST_ASSERT(stats.min_seqnum == 0);
     TEST_ASSERT(stats.max_seqnum == 0);
     TEST_ASSERT(stats.num_entries == 0);
     TEST_ASSERT(stats.index_size == 0);
 
-    TEST_ASSERT(ldb_stats(&db, 0, 10000000, &stats) == LDB_OK);
+    TEST_ASSERT(ldb_stats(&journal, 0, 10000000, &stats) == LDB_OK);
     TEST_ASSERT(stats.min_seqnum == 20);
     TEST_ASSERT(stats.max_seqnum == 314);
     TEST_ASSERT(stats.num_entries == 295);
     TEST_ASSERT(stats.index_size == 7080);
 //    TEST_ASSERT(stats.data_size == 13410);
 
-    TEST_ASSERT(ldb_stats(&db, 100, 200, &stats) == LDB_OK);
+    TEST_ASSERT(ldb_stats(&journal, 100, 200, &stats) == LDB_OK);
     TEST_ASSERT(stats.min_seqnum == 100);
     TEST_ASSERT(stats.max_seqnum == 200);
     TEST_ASSERT(stats.num_entries == 101);
     TEST_ASSERT(stats.index_size == 2424);
 //    TEST_ASSERT(stats.data_size == 4646);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 }
 
 void test_search_invalid_args(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     uint64_t seqnum = 0;
 
     TEST_ASSERT(ldb_search(NULL, 1, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_search(&db, 1, LDB_SEARCH_LOWER, NULL) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_search(&db, 1, (ldb_search_e)(9), &seqnum) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_search(&db, 1, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR);
+    TEST_ASSERT(ldb_search(&journal, 1, LDB_SEARCH_LOWER, NULL) == LDB_ERR_ARG);
+    TEST_ASSERT(ldb_search(&journal, 1, (ldb_search_e)(9), &seqnum) == LDB_ERR_ARG);
+    TEST_ASSERT(ldb_search(&journal, 1, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR);
 }
 
 void test_search_nominal_case(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     uint64_t seqnum = 0;
 
     remove("test.dat");
     remove("test.idx");
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
-    TEST_ASSERT(ldb_search(&db, 10, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_search(&journal, 10, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR_NOT_FOUND);
 
-    append_entries(&db, 20, 314);
+    append_entries(&journal, 20, 314);
 
     // LDB_SEARCH_LOWER
-    TEST_ASSERT(ldb_search(&db, 0, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 0, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 20);
-    TEST_ASSERT(ldb_search(&db, 10, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 10, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 20);
-    TEST_ASSERT(ldb_search(&db, 20, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 20, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 20);
-    TEST_ASSERT(ldb_search(&db, 25, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 25, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 30);
-    TEST_ASSERT(ldb_search(&db, 30, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 30, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 30);
-    TEST_ASSERT(ldb_search(&db, 295, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 295, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 300);
-    TEST_ASSERT(ldb_search(&db, 300, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 300, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 300);
-    TEST_ASSERT(ldb_search(&db, 305, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 305, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 310);
-    TEST_ASSERT(ldb_search(&db, 310, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 310, LDB_SEARCH_LOWER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 310);
-    TEST_ASSERT(ldb_search(&db, 311, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR_NOT_FOUND);
-    TEST_ASSERT(ldb_search(&db, 314, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR_NOT_FOUND);
-    TEST_ASSERT(ldb_search(&db, 999, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_search(&journal, 311, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_search(&journal, 314, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_search(&journal, 999, LDB_SEARCH_LOWER, &seqnum) == LDB_ERR_NOT_FOUND);
 
     // LDB_SEARCH_UPPER
-    TEST_ASSERT(ldb_search(&db, 0, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 0, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 20);
-    TEST_ASSERT(ldb_search(&db, 10, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 10, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 20);
-    TEST_ASSERT(ldb_search(&db, 20, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 20, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 30);
-    TEST_ASSERT(ldb_search(&db, 25, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 25, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 30);
-    TEST_ASSERT(ldb_search(&db, 30, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 30, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 40);
-    TEST_ASSERT(ldb_search(&db, 295, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 295, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 300);
-    TEST_ASSERT(ldb_search(&db, 300, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 300, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 310);
-    TEST_ASSERT(ldb_search(&db, 305, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
+    TEST_ASSERT(ldb_search(&journal, 305, LDB_SEARCH_UPPER, &seqnum) == LDB_OK);
     TEST_ASSERT(seqnum == 310);
-    TEST_ASSERT(ldb_search(&db, 310, LDB_SEARCH_UPPER, &seqnum) == LDB_ERR_NOT_FOUND);
-    TEST_ASSERT(ldb_search(&db, 311, LDB_SEARCH_UPPER, &seqnum) == LDB_ERR_NOT_FOUND);
-    TEST_ASSERT(ldb_search(&db, 314, LDB_SEARCH_UPPER, &seqnum) == LDB_ERR_NOT_FOUND);
-    TEST_ASSERT(ldb_search(&db, 999, LDB_SEARCH_UPPER, &seqnum) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_search(&journal, 310, LDB_SEARCH_UPPER, &seqnum) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_search(&journal, 311, LDB_SEARCH_UPPER, &seqnum) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_search(&journal, 314, LDB_SEARCH_UPPER, &seqnum) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_search(&journal, 999, LDB_SEARCH_UPPER, &seqnum) == LDB_ERR_NOT_FOUND);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 }
 
 void test_rollback_invalid_args(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     TEST_ASSERT(ldb_rollback(NULL, 1) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_rollback(&db, 1) == LDB_ERR);
+    TEST_ASSERT(ldb_rollback(&journal, 1) == LDB_ERR);
 }
 
 void test_rollback_nominal_case(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     size_t end = 0;
 
     remove("test.dat");
     remove("test.idx");
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
-    TEST_ASSERT(ldb_rollback(&db, 0) == 0);
-    TEST_ASSERT(ldb_rollback(&db, 1) == 0);
+    TEST_ASSERT(ldb_rollback(&journal, 0) == 0);
+    TEST_ASSERT(ldb_rollback(&journal, 1) == 0);
 
-    append_entries(&db, 20, 314);
-    end = db.dat_end;
+    append_entries(&journal, 20, 314);
+    end = journal.dat_end;
 
-    TEST_ASSERT(ldb_rollback(&db, 400) == 0);
-    TEST_ASSERT(db.state.seqnum1 == 20);
-    TEST_ASSERT(db.state.seqnum2 == 314);
-    TEST_ASSERT(db.dat_end == end);
+    TEST_ASSERT(ldb_rollback(&journal, 400) == 0);
+    TEST_ASSERT(journal.state.seqnum1 == 20);
+    TEST_ASSERT(journal.state.seqnum2 == 314);
+    TEST_ASSERT(journal.dat_end == end);
 
-    TEST_ASSERT(ldb_rollback(&db, 314) == 0);
-    TEST_ASSERT(db.state.seqnum1 == 20);
-    TEST_ASSERT(db.state.seqnum2 == 314);
-    TEST_ASSERT(db.dat_end == end);
+    TEST_ASSERT(ldb_rollback(&journal, 314) == 0);
+    TEST_ASSERT(journal.state.seqnum1 == 20);
+    TEST_ASSERT(journal.state.seqnum2 == 314);
+    TEST_ASSERT(journal.dat_end == end);
 
-    TEST_ASSERT(ldb_rollback(&db, 313) == 1);
-    TEST_ASSERT(db.state.seqnum1 == 20);
-    TEST_ASSERT(db.state.seqnum2 == 313);
-    TEST_ASSERT(db.dat_end < end);
-    end = db.dat_end;
+    TEST_ASSERT(ldb_rollback(&journal, 313) == 1);
+    TEST_ASSERT(journal.state.seqnum1 == 20);
+    TEST_ASSERT(journal.state.seqnum2 == 313);
+    TEST_ASSERT(journal.dat_end < end);
+    end = journal.dat_end;
 
-    TEST_ASSERT(ldb_rollback(&db, 100) == 213);
-    TEST_ASSERT(db.state.seqnum1 == 20);
-    TEST_ASSERT(db.state.seqnum2 == 100);
-    TEST_ASSERT(db.dat_end < end);
-    end = db.dat_end;
+    TEST_ASSERT(ldb_rollback(&journal, 100) == 213);
+    TEST_ASSERT(journal.state.seqnum1 == 20);
+    TEST_ASSERT(journal.state.seqnum2 == 100);
+    TEST_ASSERT(journal.dat_end < end);
+    end = journal.dat_end;
 
-    TEST_ASSERT(ldb_rollback(&db, 20) == 80);
-    TEST_ASSERT(db.state.seqnum1 == 20);
-    TEST_ASSERT(db.state.seqnum2 == 20);
-    TEST_ASSERT(db.dat_end < end);
-    end = db.dat_end;
+    TEST_ASSERT(ldb_rollback(&journal, 20) == 80);
+    TEST_ASSERT(journal.state.seqnum1 == 20);
+    TEST_ASSERT(journal.state.seqnum2 == 20);
+    TEST_ASSERT(journal.dat_end < end);
+    end = journal.dat_end;
 
-    TEST_ASSERT(ldb_rollback(&db, 0) == 1);
-    TEST_ASSERT(db.state.seqnum1 == 0);
-    TEST_ASSERT(db.state.seqnum2 == 0);
-    TEST_ASSERT(db.dat_end < end);
+    TEST_ASSERT(ldb_rollback(&journal, 0) == 1);
+    TEST_ASSERT(journal.state.seqnum1 == 0);
+    TEST_ASSERT(journal.state.seqnum2 == 0);
+    TEST_ASSERT(journal.dat_end < end);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 }
 
 void test_purge_invalid_args(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     TEST_ASSERT(ldb_purge(NULL, 10) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_purge(&db, 10) == LDB_ERR);
+    TEST_ASSERT(ldb_purge(&journal, 10) == LDB_ERR);
 }
 
-void test_purge_empty_db(void)
+void test_purge_empty(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    TEST_ASSERT(ldb_purge(&db, 10) == 0);
-    ldb_close(&db);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    TEST_ASSERT(ldb_purge(&journal, 10) == 0);
+    ldb_close(&journal);
 }
 
 void test_purge_nothing(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    append_entries(&db, 20, 314);
-    TEST_ASSERT(db.state.seqnum1 == 20);
-    TEST_ASSERT(db.state.seqnum2 == 314);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    append_entries(&journal, 20, 314);
+    TEST_ASSERT(journal.state.seqnum1 == 20);
+    TEST_ASSERT(journal.state.seqnum2 == 314);
 
-    TEST_ASSERT(ldb_purge(&db, 10) == 0);
-    TEST_ASSERT(db.state.seqnum1 == 20);
-    TEST_ASSERT(db.state.seqnum2 == 314);
+    TEST_ASSERT(ldb_purge(&journal, 10) == 0);
+    TEST_ASSERT(journal.state.seqnum1 == 20);
+    TEST_ASSERT(journal.state.seqnum2 == 314);
 
-    ldb_close(&db);
+    ldb_close(&journal);
 }
 
 void test_purge_nominal_case(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
     ldb_entry_t entry = {0};
     size_t dat_end = 0;
 
     remove("test.dat");
     remove("test.idx");
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    append_entries(&db, 20, 314);
-    TEST_ASSERT(db.state.seqnum1 == 20);
-    TEST_ASSERT(db.state.seqnum2 == 314);
-    dat_end = db.dat_end;
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    append_entries(&journal, 20, 314);
+    TEST_ASSERT(journal.state.seqnum1 == 20);
+    TEST_ASSERT(journal.state.seqnum2 == 314);
+    dat_end = journal.dat_end;
 
-    TEST_ASSERT(ldb_purge(&db, 100) == 80);
-    TEST_ASSERT(db.state.seqnum1 == 100);
-    TEST_ASSERT(db.state.seqnum2 == 314);
-    TEST_ASSERT(db.dat_end < dat_end);
-    TEST_ASSERT(ldb_read(&db, 101, &entry, 1, NULL) == LDB_OK);
+    TEST_ASSERT(ldb_purge(&journal, 100) == 80);
+    TEST_ASSERT(journal.state.seqnum1 == 100);
+    TEST_ASSERT(journal.state.seqnum2 == 314);
+    TEST_ASSERT(journal.dat_end < dat_end);
+    TEST_ASSERT(ldb_read(&journal, 101, &entry, 1, NULL) == LDB_OK);
     TEST_ASSERT(entry.seqnum == 101);
-    ldb_close(&db);
+    ldb_close(&journal);
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    TEST_ASSERT(db.state.seqnum1 == 100);
-    TEST_ASSERT(db.state.seqnum2 == 314);
-    ldb_close(&db);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    TEST_ASSERT(journal.state.seqnum1 == 100);
+    TEST_ASSERT(journal.state.seqnum2 == 314);
+    ldb_close(&journal);
 
     ldb_free_entry(&entry);
 }
 
 void test_purge_all(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
     remove("test.dat");
     remove("test.idx");
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    append_entries(&db, 20, 314);
-    TEST_ASSERT(db.state.seqnum1 == 20);
-    TEST_ASSERT(db.state.seqnum2 == 314);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    append_entries(&journal, 20, 314);
+    TEST_ASSERT(journal.state.seqnum1 == 20);
+    TEST_ASSERT(journal.state.seqnum2 == 314);
 
-    TEST_ASSERT(ldb_purge(&db, 1000) == 295);
-    TEST_ASSERT(db.state.seqnum1 == 0);
-    TEST_ASSERT(db.state.seqnum2 == 0);
-    ldb_close(&db);
+    TEST_ASSERT(ldb_purge(&journal, 1000) == 295);
+    TEST_ASSERT(journal.state.seqnum1 == 0);
+    TEST_ASSERT(journal.state.seqnum2 == 0);
+    ldb_close(&journal);
 
-    TEST_ASSERT(ldb_open(&db, "", "test", false) == LDB_OK);
-    TEST_ASSERT(db.state.seqnum1 == 0);
-    TEST_ASSERT(db.state.seqnum2 == 0);
-    ldb_close(&db);
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    TEST_ASSERT(journal.state.seqnum1 == 0);
+    TEST_ASSERT(journal.state.seqnum2 == 0);
+    ldb_close(&journal);
 }
 
 void test_alloc_all(void)
 {
-    ldb_db_t *db = ldb_alloc();
-    TEST_ASSERT(db != NULL);
-    ldb_free(db);
+    ldb_journal_t *journal = ldb_alloc();
+    TEST_ASSERT(journal != NULL);
+    ldb_free(journal);
 }
 
 void test_fsync_all(void)
 {
-    ldb_db_t db = {0};
+    ldb_journal_t journal = {0};
 
-    TEST_ASSERT(ldb_set_fsync_mode(&db, true) == 0);
-    TEST_ASSERT(ldb_set_fsync_mode(&db, false) == 0);
+    TEST_ASSERT(ldb_set_fsync_mode(&journal, true) == 0);
+    TEST_ASSERT(ldb_set_fsync_mode(&journal, false) == 0);
     TEST_ASSERT(ldb_set_fsync_mode(NULL, true) != 0);
 }
 
@@ -1381,8 +1381,8 @@ TEST_LIST = {
     { "open() with invalid args",     test_open_invalid_args },
     { "open() with invalid path",     test_open_invalid_path },
     { "open() with invalid name",     test_open_invalid_name },
-    { "open() create db",             test_open_create_db },
-    { "open() empty db",              test_open_empty_db },
+    { "open() create journal",        test_open_create },
+    { "open() empty journal",         test_open_empty },
     { "open() invl dat header",       test_open_invl_dat_header },
     { "open() and repair (I)",        test_open_and_repair_1 },
     { "open() and repair (II)",       test_open_and_repair_2 },
@@ -1402,7 +1402,7 @@ TEST_LIST = {
     { "append() broken sequence",     test_append_broken_sequence },
     { "append() lack of data",        test_append_lack_of_data },
     { "read() invalid args",          test_read_invalid_args },
-    { "read() empty db",              test_read_empty_db },
+    { "read() empty journal",         test_read_empty },
     { "read() nominal case",          test_read_nominal_case },
     { "stats() invalid args",         test_stats_invalid_args },
     { "stats() nominal case",         test_stats_nominal_case },
@@ -1411,7 +1411,7 @@ TEST_LIST = {
     { "rollback() invalid args",      test_rollback_invalid_args },
     { "rollback() nominal case",      test_rollback_nominal_case },
     { "purge() invalid args",         test_purge_invalid_args },
-    { "purge() empty db",             test_purge_empty_db },
+    { "purge() empty journal",        test_purge_empty },
     { "purge() nothing",              test_purge_nothing },
     { "purge() nominal case",         test_purge_nominal_case },
     { "purge() all",                  test_purge_all },

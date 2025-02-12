@@ -18,15 +18,15 @@
 #define LDB_PATH_SEPARATOR      "/"
 #define LDB_NAME_MAX_LENGTH     32 
 #define LDB_TEXT_LEN            128  /* value multiple of 8 to preserve alignment */
-#define LDB_TEXT_DAT            "\nThis is a ldb database dat file.\nDon't edit it.\n"
-#define LDB_TEXT_IDX            "\nThis is a ldb database idx file.\nDon't edit it.\n"
+#define LDB_TEXT_DAT            "\nThis is a ldb journal dat file.\nDon't edit it.\n"
+#define LDB_TEXT_IDX            "\nThis is a ldb journal idx file.\nDon't edit it.\n"
 #define LDB_MAGIC_NUMBER        0x211ABF1A62646C00
 #define LDB_FORMAT_1            1
 
 typedef struct ldb_impl_t
 {
     // Fixed info (unchanged)
-    char *name;                   // Database name
+    char *name;                   // Journal name
     char *path;                   // Directory where files are located
     char *dat_path;               // Data filepath (path + filename)
     char *idx_path;               // Index filepath (path + filename)
@@ -168,7 +168,7 @@ const char * ldb_strerror(int errnum)
         case LDB_ERR: return "Generic error";
         case LDB_ERR_ARG: return "Invalid argument";
         case LDB_ERR_MEM: return "Out of memory";
-        case LDB_ERR_NAME: return "Invalid db name";
+        case LDB_ERR_NAME: return "Invalid journal name";
         case LDB_ERR_PATH: return "Invalid directory";
         case LDB_ERR_OPEN_DAT: return "Cannot open dat file";
         case LDB_ERR_READ_DAT: return "Error reading dat file";
@@ -215,7 +215,7 @@ static uint64_t ldb_clamp(uint64_t val, uint64_t lo, uint64_t hi) {
 }
 
 LDB_INLINE
-static bool ldb_is_valid_db(ldb_impl_t *obj) {
+static bool ldb_is_valid_obj(ldb_impl_t *obj) {
     return (obj &&
             obj->dat_fp && !feof(obj->dat_fp) && !ferror(obj->dat_fp) &&
             obj->idx_fp && !feof(obj->idx_fp) && !ferror(obj->idx_fp) &&
@@ -1375,7 +1375,7 @@ int ldb_append(ldb_impl_t *obj, ldb_entry_t *entries, size_t len, size_t *num)
     if (!obj || !entries)
         return LDB_ERR_ARG;
 
-    if (!ldb_is_valid_db(obj))
+    if (!ldb_is_valid_obj(obj))
         return LDB_ERR;
 
     if (num != NULL)
@@ -1456,7 +1456,7 @@ int ldb_read(ldb_impl_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len,
     ldb_state_t state;
     ldb_record_idx_t record_idx = {0};
 
-    if (!ldb_is_valid_db(obj))
+    if (!ldb_is_valid_obj(obj))
         exit_function(LDB_ERR);
 
     pthread_mutex_lock(&obj->mutex_data);
@@ -1508,7 +1508,7 @@ int ldb_stats(ldb_impl_t *obj, uint64_t seqnum1, uint64_t seqnum2, ldb_stats_t *
     ldb_record_idx_t record2 = {0};
     ldb_record_dat_t record_dat = {0};
 
-    if (!ldb_is_valid_db(obj))
+    if (!ldb_is_valid_obj(obj))
         exit_function(LDB_ERR);
 
     pthread_mutex_lock(&obj->mutex_data);
@@ -1572,7 +1572,7 @@ int ldb_search(ldb_impl_t *obj, uint64_t timestamp, ldb_search_e mode, uint64_t 
     uint64_t ts1 = 0;
     uint64_t ts2 = 0;
 
-    if (!ldb_is_valid_db(obj))
+    if (!ldb_is_valid_obj(obj))
         exit_function(LDB_ERR);
 
     pthread_mutex_lock(&obj->mutex_data);
@@ -1654,7 +1654,7 @@ long ldb_rollback(ldb_impl_t *obj, uint64_t seqnum)
     size_t dat_end_new = sizeof(ldb_header_dat_t);
     uint64_t last_timestamp_new = 0;
 
-    if (!ldb_is_valid_db(obj))
+    if (!ldb_is_valid_obj(obj))
         exit_function(LDB_ERR);
 
     // case nothing to rollback
@@ -1750,7 +1750,7 @@ long ldb_purge(ldb_impl_t *obj, uint64_t seqnum)
         .text = {0}
     };
 
-    if (!ldb_is_valid_db(obj))
+    if (!ldb_is_valid_obj(obj))
         exit_function(LDB_ERR);
 
     // case no entries to purge
@@ -1856,15 +1856,15 @@ LDB_PURGE_END:
 
 #undef exit_function
 
-ldb_db_t * ldb_alloc(void) {
-    return (ldb_db_t *) calloc(1, sizeof(ldb_impl_t));
+ldb_journal_t * ldb_alloc(void) {
+    return (ldb_journal_t *) calloc(1, sizeof(ldb_impl_t));
 }
 
-void ldb_free(ldb_db_t *obj) {
+void ldb_free(ldb_journal_t *obj) {
     free(obj);
 }
 
-int ldb_set_fsync_mode(ldb_db_t *obj, bool fsync) {
+int ldb_set_fsync_mode(ldb_journal_t *obj, bool fsync) {
     if (!obj)
         return LDB_ERR_ARG;
 

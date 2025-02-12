@@ -51,22 +51,24 @@ Drop [`journal.h`](journal.h) and [`journal.c`](journal.c) into your project and
 ```c
 #include "journal.h"
 
-ldb_db_t db = {0};
+ldb_journal_t *journal = NULL;
 ldb_entry_t wentries[MAX_ENTRIES] = {{0}};
 ldb_entry_t rentries[MAX_ENTRIES] = {{0}};
 
-ldb_open(&db, "/my/directory", "example", true);
+journal = ldb_alloc();
+ldb_open(journal, "/my/directory", "example", true);
 
 // on write-thread
 fill_entries(wentries, MAX_ENTRIES);
-ldb_append(&db, wentries, MAX_ENTRIES, NULL);
+ldb_append(journal, wentries, MAX_ENTRIES, NULL);
 
 // on read-thread
-ldb_read(&db, 1, rentries, MAX_ENTRIES, NULL);
+ldb_read(journal, 1, rentries, MAX_ENTRIES, NULL);
 process_entries(rentries, MAX_ENTRIES);
 
 ldb_free_entries(rentries, MAX_ENTRIES);
-ldb_close(&db);
+ldb_close(journal);
+ldb_free(journal);
 ```
 
 Read the function documentation in `journal.h`.<br/>

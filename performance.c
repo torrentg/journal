@@ -12,9 +12,9 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
 typedef struct {
-    bool truncate_db;
+    bool truncate;
     bool force_sync;
-} params_db_t;
+} params_journal_t;
 
 typedef struct {
     size_t bytes_per_record;
@@ -35,7 +35,7 @@ typedef struct {
 } results_write_t;
 
 typedef struct {
-    ldb_db_t *db;
+    ldb_journal_t *journal;
     params_write_t params;
     results_write_t results;
 } args_write_t;
@@ -58,7 +58,7 @@ typedef struct {
 } results_read_t;
 
 typedef struct {
-    ldb_db_t *db;
+    ldb_journal_t *journal;
     params_read_t params;
     results_read_t results;
 } args_read_t;
@@ -149,7 +149,7 @@ static void print_results_read(results_read_t *results)
 
 static void * run_write(void *args)
 {
-    ldb_db_t *db = ((args_write_t *) args)->db;
+    ldb_journal_t *journal = ((args_write_t *) args)->journal;
     params_write_t *params = &((args_write_t *) args)->params;
     results_write_t *results = &((args_write_t *) args)->results;
 
@@ -183,7 +183,7 @@ static void * run_write(void *args)
             entries[i].timestamp = 0;
         }
 
-        if ((results->rc = ldb_append(db, entries, num_entries, &num)) != LDB_OK)
+        if ((results->rc = ldb_append(journal, entries, num_entries, &num)) != LDB_OK)
             break;
 
         results->num_commits += (num > 0 ? 1 : 0);
@@ -212,7 +212,7 @@ static void * run_write(void *args)
 
 static void * run_read(void *args)
 {
-    ldb_db_t *db = ((args_read_t *) args)->db;
+    ldb_journal_t *journal = ((args_read_t *) args)->journal;
     params_read_t *params = &((args_read_t *) args)->params;
     results_read_t *results = &((args_read_t *) args)->results;
 
@@ -232,14 +232,14 @@ static void * run_read(void *args)
             results->num_records < params->max_records &&
             results->num_bytes < params->max_bytes)
     {
-        if ((results->rc = ldb_stats(db, 0, SIZE_MAX, &stats)) != LDB_OK)
+        if ((results->rc = ldb_stats(journal, 0, SIZE_MAX, &stats)) != LDB_OK)
             break;
 
         if (stats.num_entries)
         {
             seqnum = stats.min_seqnum + rand() % stats.num_entries;
 
-            if ((results->rc = ldb_read(db, seqnum, entries, num_entries, &num)) != LDB_OK)
+            if ((results->rc = ldb_read(journal, seqnum, entries, num_entries, &num)) != LDB_OK)
                 break;
 
             results->num_queries += (num > 0 ? 1 : 0);
@@ -279,7 +279,7 @@ static void help(void)
         "Arguments:" "\n" \
         "   -h, --help                          Display this help and quit." "\n" \
         "   -s, --force-sync                    Force sync after flush." "\n" \
-        "   -a, --append                        Preserve existing db (truncated by default)" "\n" \
+        "   -a, --append                        Preserve existing journal (truncated by default)" "\n" \
         "   --bpr, --bytes-per-record           Bytes per record (allowed suffixes: B, KB, MB, GB, TB)." "\n" \
         "   --rpc, --records-per-commit         Records per commit." "\n" \
         "   --rpq, --records-per-query          Records per query." "\n" \
@@ -348,7 +348,7 @@ static size_t parse_bytes(const char *str, const char *arg)
     exit(EXIT_FAILURE);
 }
 
-static void parse_args(int argc, char *argv[], params_db_t *params_db, params_write_t *params_write, params_read_t *params_read)
+static void parse_args(int argc, char *argv[], params_journal_t *params_journal, params_write_t *params_write, params_read_t *params_read)
 {
     const char* const options1 = "has" ;
     const struct option options2[] = {
@@ -380,8 +380,8 @@ static void parse_args(int argc, char *argv[], params_db_t *params_db, params_wr
         { NULL,                       0,  NULL,   0  }
     };
 
-    *params_db = (params_db_t) {
-        .truncate_db = true,
+    *params_journal = (params_journal_t) {
+        .truncate = true,
         .force_sync = false
     };
 
@@ -418,10 +418,10 @@ static void parse_args(int argc, char *argv[], params_db_t *params_db, params_wr
                 help();
                 exit(EXIT_SUCCESS);
             case 'a':
-                params_db->truncate_db = false;
+                params_journal->truncate = false;
                 break;
             case 's':
-                params_db->force_sync = true;
+                params_journal->force_sync = true;
                 break;
             case 301:
                 params_write->bytes_per_record = parse_bytes(optarg, "bytes-per-record");
@@ -500,13 +500,13 @@ static void parse_args(int argc, char *argv[], params_db_t *params_db, params_wr
 
 int main(int argc, char *argv[])
 {
-    params_db_t params_db = {0};
+    params_journal_t params_journal = {0};
     params_write_t params_write = {0};
     params_read_t params_read = {0};
 
-    parse_args(argc, argv, &params_db, &params_write, &params_read);
+    parse_args(argc, argv, &params_journal, &params_write, &params_read);
 
-    if (params_db.truncate_db) {
+    if (params_journal.truncate) {
         remove("performance.dat");
         remove("performance.idx");
     }
@@ -514,21 +514,21 @@ int main(int argc, char *argv[])
     srand(time(NULL));
     signal(SIGINT, signal_handler);
 
-    ldb_db_t *db = ldb_alloc();
+    ldb_journal_t *journal = ldb_alloc();
 
-    if (ldb_open(db, "", "performance", false) != LDB_OK) {
-        fprintf(stderr, "error opening database\n");
+    if (ldb_open(journal, "", "performance", false) != LDB_OK) {
+        fprintf(stderr, "error opening journal\n");
         return EXIT_FAILURE;
     }
 
-    ldb_set_fsync_mode(db, params_db.force_sync);
+    ldb_set_fsync_mode(journal, params_journal.force_sync);
 
     pthread_t thread_write;
-    args_write_t args_write = { .db = db, .params = params_write };
+    args_write_t args_write = { .journal = journal, .params = params_write };
     pthread_create(&thread_write, NULL, run_write, &args_write); 
 
     pthread_t thread_read;
-    args_read_t args_read = { .db = db, .params = params_read };
+    args_read_t args_read = { .journal = journal, .params = params_read };
     pthread_create(&thread_read, NULL, run_read, &args_read); 
 
     pthread_join(thread_write, NULL);
@@ -537,8 +537,8 @@ int main(int argc, char *argv[])
     print_results_write(&args_write.results);
     print_results_read(&args_read.results);
 
-    ldb_close(db);
-    ldb_free(db);
+    ldb_close(journal);
+    ldb_free(journal);
 
     return EXIT_SUCCESS;
 }
