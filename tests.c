@@ -1362,9 +1362,9 @@ void test_fsync_all(void)
 {
     ldb_journal_t journal = {0};
 
-    TEST_ASSERT(ldb_set_fsync_mode(&journal, true) == 0);
-    TEST_ASSERT(ldb_set_fsync_mode(&journal, false) == 0);
-    TEST_ASSERT(ldb_set_fsync_mode(NULL, true) != 0);
+    TEST_ASSERT(ldb_set_fsync(&journal, true) == 0);
+    TEST_ASSERT(ldb_set_fsync(&journal, false) == 0);
+    TEST_ASSERT(ldb_set_fsync(NULL, true) != 0);
 }
 
 TEST_LIST = {

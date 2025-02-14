@@ -1864,7 +1864,7 @@ void ldb_free(ldb_journal_t *obj) {
     free(obj);
 }
 
-int ldb_set_fsync_mode(ldb_journal_t *obj, bool fsync) {
+int ldb_set_fsync(ldb_journal_t *obj, bool fsync) {
     if (!obj)
         return LDB_ERR_ARG;
 

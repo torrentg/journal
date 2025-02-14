@@ -521,7 +521,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    ldb_set_fsync_mode(journal, params_journal.force_sync);
+    ldb_set_fsync(journal, params_journal.force_sync);
 
     pthread_t thread_write;
     args_write_t args_write = { .journal = journal, .params = params_write };

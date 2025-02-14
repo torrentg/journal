@@ -240,7 +240,7 @@ void ldb_free(ldb_journal_t *obj);
  * Rebuilds the index file when corrupted or not found.
  * 
  * By default fsync flag is disabled. 
- * Use the function ldb_set_fsync_mode() to set it to true.
+ * Use the function ldb_set_fsync() to set it to true.
  * 
  * @param[in,out] obj Uninitialized the journal object.
  * @param[in] path Directory where journal files are located.
@@ -273,7 +273,7 @@ int ldb_close(ldb_journal_t *obj);
  * @param[in] fsync Mode to set (true=enable, false=disable).
  * @return Error code (0 = OK).
  */
-int ldb_set_fsync_mode(ldb_journal_t *obj, bool fsync);
+int ldb_set_fsync(ldb_journal_t *obj, bool fsync);
 
 /**
  * Appends entries to the journal.
