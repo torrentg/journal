@@ -10,6 +10,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #include "journal.h"
 
 /**
@@ -189,6 +190,7 @@ const char * ldb_strerror(int errnum)
         case LDB_ERR_NOT_FOUND: return "No results";
         case LDB_ERR_TMP_FILE: return "Error creating temp file";
         case LDB_ERR_CHECKSUM: return "Checksum mismatch";
+        case LDB_ERR_LOCK: return "Error locking file";
         default: return "Unknown error";
     }
 }
@@ -241,14 +243,30 @@ static int ldb_close_files(ldb_impl_t *obj)
 
     int ret = LDB_OK;
 
-    if (obj->idx_fp != NULL && fclose(obj->idx_fp) != 0)
-        ret = LDB_ERR_WRITE_IDX;
+    if (obj->idx_fp != NULL)
+    {
+        int idx_fd = fileno(obj->idx_fp);
 
-    if (obj->dat_fp != NULL && fclose(obj->dat_fp) != 0)
-        ret = LDB_ERR_WRITE_DAT;
+        flock(idx_fd, LOCK_UN);
 
-    obj->dat_fp = NULL;
-    obj->idx_fp = NULL;
+        if (fclose(obj->idx_fp) != 0)
+            ret = LDB_ERR_WRITE_IDX;
+
+        obj->idx_fp = NULL;
+    }
+
+    if (obj->dat_fp != NULL)
+    { 
+        int dat_fd = fileno(obj->dat_fp);
+
+        flock(dat_fd, LOCK_UN);
+
+        if (fclose(obj->dat_fp) != 0)
+            ret = LDB_ERR_WRITE_DAT;
+
+        obj->dat_fp = NULL;
+    }
+
     obj->dat_end = 0;
 
     return ret;
@@ -889,6 +907,9 @@ static int ldb_open_file_dat(ldb_impl_t *obj, bool check)
     if ((dat_fd = fileno(obj->dat_fp)) == -1)
         return LDB_ERR_OPEN_DAT;
 
+    if (flock(dat_fd, LOCK_EX | LOCK_NB) == -1)
+        return LDB_ERR_LOCK;
+
     len = ldb_get_file_size(obj->dat_fp);
 
     if (pread(dat_fd, &header, sizeof(ldb_header_dat_t), 0) != sizeof(ldb_header_dat_t))
@@ -1028,6 +1049,9 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
 
     if ((idx_fd = fileno(obj->idx_fp)) == -1)
         return LDB_ERR_OPEN_IDX;
+
+    if (flock(idx_fd, LOCK_EX | LOCK_NB) == -1)
+        return LDB_ERR_LOCK;
 
     len = ldb_get_file_size(obj->idx_fp);
 

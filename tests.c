@@ -65,11 +65,11 @@ void test_strerror(void)
     const char *unknown_error = ldb_strerror(-999);
     TEST_ASSERT(unknown_error != NULL);
 
-    for (int i = 0; i < 21; i++) {
+    for (int i = 0; i < 22; i++) {
         TEST_ASSERT(ldb_strerror(-i) != NULL);
         TEST_ASSERT(strcmp(ldb_strerror(-i), unknown_error) != 0);
     }
-    for (int i = 21; i < 32; i++) {
+    for (int i = 22; i < 32; i++) {
         TEST_ASSERT(ldb_strerror(-i) != NULL);
         TEST_ASSERT(strcmp(ldb_strerror(-i), unknown_error) == 0);
     }
@@ -1367,6 +1367,19 @@ void test_fsync_all(void)
     TEST_ASSERT(ldb_set_fsync(NULL, true) != 0);
 }
 
+void test_flock(void)
+{
+    ldb_journal_t journal1 = {0};
+    ldb_journal_t journal2 = {0};
+
+    remove("test.dat");
+    remove("test.idx");
+
+    TEST_ASSERT(ldb_open(&journal1, "", "test", false) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal2, "", "test", false) == LDB_ERR_LOCK);
+    ldb_close(&journal1);
+}
+
 TEST_LIST = {
     { "crc32()",                      test_crc32 },
     { "version()",                    test_version },
@@ -1417,5 +1430,6 @@ TEST_LIST = {
     { "purge() all",                  test_purge_all },
     { "alloc() all",                  test_alloc_all },
     { "fsync() all",                  test_fsync_all },
+    { "flock()",                      test_flock },
     { NULL, NULL }
 };

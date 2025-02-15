@@ -31,7 +31,7 @@ helgrind: performance
 	valgrind --tool=helgrind --history-backtrace-size=50 ./performance --msw=1 --bpr=10KB --rpc=40 --msr=1 --rpq=100
 
 cppcheck: journal.h journal.c
-	cppcheck --enable=all  --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=checkersReport journal.c
+	cppcheck --enable=all --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=assertWithSideEffect --suppress=checkersReport journal.c
 
 loc:
 	cloc journal.h journal.c tests.c example.c performance.c

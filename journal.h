@@ -143,6 +143,7 @@ SOFTWARE.
 #define LDB_ERR_NOT_FOUND        -18
 #define LDB_ERR_TMP_FILE         -19
 #define LDB_ERR_CHECKSUM         -20
+#define LDB_ERR_LOCK             -21
 
 #ifdef __cplusplus
 extern "C" {
