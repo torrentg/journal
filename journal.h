@@ -157,29 +157,29 @@ typedef enum ldb_search_e {
 } ldb_search_e;
 
 typedef struct ldb_state_t {
-    uint64_t seqnum1;             // Initial seqnum (0 means no entries)
-    uint64_t timestamp1;          // Timestamp of the first entry
-    uint64_t seqnum2;             // Ending seqnum (0 means no entries)
-    uint64_t timestamp2;          // Timestamp of the last entry
+    uint64_t seqnum1;             // First sequence number (0 means no entries).
+    uint64_t timestamp1;          // Timestamp of the first entry.
+    uint64_t seqnum2;             // Last sequence number (0 means no entries).
+    uint64_t timestamp2;          // Timestamp of the last entry.
 } ldb_state_t;
 
 typedef struct ldb_entry_t {
-    uint64_t seqnum;
-    uint64_t timestamp;
-    uint32_t metadata_len;
-    uint32_t data_len;
-    void *metadata;
-    void *data;
+    uint64_t seqnum;              // Sequence number (0 = system assigned).
+    uint64_t timestamp;           // Timestamp (0 = system assigned).
+    uint32_t metadata_len;        // Length of metadata (in bytes).
+    uint32_t data_len;            // Length of data (in bytes).
+    void *metadata;               // Pointer to metadata.
+    void *data;                   // Pointer to data.
 } ldb_entry_t;
 
 typedef struct ldb_stats_t {
-    uint64_t min_seqnum;
-    uint64_t max_seqnum;
-    uint64_t min_timestamp;
-    uint64_t max_timestamp;
-    size_t num_entries;
-    size_t data_size;
-    size_t index_size;
+    uint64_t min_seqnum;          // Minimum sequence number.
+    uint64_t max_seqnum;          // Maximum sequence number.
+    uint64_t min_timestamp;       // Minimum timestamp.
+    uint64_t max_timestamp;       // Maximum timestamp.
+    size_t num_entries;           // Number of entries.
+    size_t data_size;             // Size of data (in bytes).
+    size_t index_size;            // Size of index (in bytes).
 } ldb_stats_t;
 
 /**

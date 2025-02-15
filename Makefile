@@ -15,7 +15,7 @@ example: example.c journal.h journal.c
 	$(CC) -g $(CFLAGS) -o $@ example.c journal.c $(LDFLAGS)
 
 performance: performance.c journal.h journal.c
-	$(CC) -g $(CFLAGS) -o $@ performance.c journal.c $(LDFLAGS)
+	$(CC) -g $(CFLAGS) -O2 -o $@ performance.c journal.c $(LDFLAGS)
 
 coverage: tests.c journal.h journal.c
 	$(CC) --coverage -O0 $(CFLAGS) -o tests-coverage tests.c -lgcov $(LDFLAGS)
@@ -31,7 +31,7 @@ helgrind: performance
 	valgrind --tool=helgrind --history-backtrace-size=50 ./performance --msw=1 --bpr=10KB --rpc=40 --msr=1 --rpq=100
 
 cppcheck: journal.h journal.c
-	cppcheck --enable=all  --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=checkersReport journal.h journal.c
+	cppcheck --enable=all  --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=checkersReport journal.c
 
 loc:
 	cloc journal.h journal.c tests.c example.c performance.c
