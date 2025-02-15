@@ -735,7 +735,7 @@ static int ldb_read_record_dat(int fd, size_t pos, ldb_record_dat_t *record, boo
     assert(record);
     assert(fd > STDERR_FILENO);
 
-    ssize_t rc = pread(fd, record, sizeof(ldb_record_dat_t), pos);
+    ssize_t rc = pread(fd, record, sizeof(ldb_record_dat_t), (off_t) pos);
 
     if (rc == -1)
         return LDB_ERR_READ_DAT;
@@ -760,7 +760,7 @@ static int ldb_read_record_dat(int fd, size_t pos, ldb_record_dat_t *record, boo
         {
             size_t num_bytes = ldb_min(end - i, sizeof(buf));
 
-            rc = pread(fd, buf, num_bytes, pos);
+            rc = pread(fd, buf, num_bytes, (off_t) pos);
 
             if (rc == -1)
                 return LDB_ERR_READ_DAT;
@@ -802,7 +802,7 @@ static int ldb_read_entry_dat(int fd, size_t pos, ldb_entry_t *entry)
     if (record.metadata_len)
     {
         assert(entry->metadata != NULL);
-        rc = pread(fd, entry->metadata, record.metadata_len, pos);
+        rc = pread(fd, entry->metadata, record.metadata_len, (off_t) pos);
 
         if (rc == -1)
             return LDB_ERR_READ_DAT;
@@ -816,7 +816,7 @@ static int ldb_read_entry_dat(int fd, size_t pos, ldb_entry_t *entry)
     if (record.data_len)
     {
         assert(entry->data != NULL);
-        rc = pread(fd, entry->data, record.data_len, pos);
+        rc = pread(fd, entry->data, record.data_len, (off_t) pos);
 
         if (rc == -1)
             return LDB_ERR_READ_DAT;
@@ -856,7 +856,7 @@ static int ldb_read_record_idx(int fd, ldb_state_t *state, uint64_t seqnum, ldb_
 
     size_t pos = ldb_get_pos_idx(state, seqnum);
 
-    if (pread(fd, record, sizeof(ldb_record_idx_t), pos) != sizeof(ldb_record_idx_t))
+    if (pread(fd, record, sizeof(ldb_record_idx_t), (off_t) pos) != sizeof(ldb_record_idx_t))
         return LDB_ERR_READ_IDX;
 
     if (record->seqnum != seqnum)
@@ -1075,7 +1075,7 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
     if (pos + sizeof(ldb_record_idx_t) <= len)
     {
         // read first entry
-        if (pread(idx_fd, &record_0, sizeof(ldb_record_idx_t), pos) != sizeof(ldb_record_idx_t)) 
+        if (pread(idx_fd, &record_0, sizeof(ldb_record_idx_t), (off_t) pos) != sizeof(ldb_record_idx_t)) 
             exit_function(LDB_ERR_READ_IDX);
 
         pos += sizeof(ldb_record_idx_t);
@@ -1103,7 +1103,7 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
 
         while (pos + sizeof(ldb_record_idx_t) <= len)
         {
-            if (pread(idx_fd, &aux, sizeof(ldb_record_idx_t), pos) != sizeof(ldb_record_idx_t)) 
+            if (pread(idx_fd, &aux, sizeof(ldb_record_idx_t), (off_t) pos) != sizeof(ldb_record_idx_t)) 
                 exit_function(LDB_ERR_READ_IDX);
 
             if (aux.seqnum == 0)
