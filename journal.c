@@ -440,6 +440,7 @@ static bool ldb_create_file_dat(const char *path)
         .text = {0}
     };
 
+    memset(header.text, 0, sizeof(header.text));
     strncpy(header.text, LDB_TEXT_DAT, sizeof(header.text));
 
     if (fwrite(&header, sizeof(ldb_header_dat_t), 1, fp) != 1)
