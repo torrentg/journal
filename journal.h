@@ -397,6 +397,103 @@ long ldb_purge(ldb_journal_t *obj, uint64_t seqnum);
 
 #ifdef __cplusplus
 }
+
+#include <stdexcept>
+#include <filesystem>
+
+namespace ldb {
+
+/**
+ * Wrapper on journal code.
+ * 
+ * This class ensures that a journal is properly allocated, opened, and closed
+ * using the RAII idiom. It prevents resource leaks by managing the lifecycle
+ * of the journal resource.
+ * 
+ * The class is default-constructible, non-copyable and movable.
+ */
+class journal_t
+{
+  public:
+
+    journal_t() = default;
+
+    journal_t(const std::filesystem::path &path, const std::string &name, bool check = true)
+    {
+        m_journal = ldb_alloc();
+
+        if (!m_journal)
+            throw std::bad_alloc();
+
+        int rc = ldb_open(m_journal, path.c_str(), name.c_str(), check);
+
+        if (rc != LDB_OK) {
+            ldb_free(m_journal);
+            throw std::runtime_error(ldb_strerror(rc));
+        }
+    }
+
+    ~journal_t()
+    {
+        if (m_journal) {
+            ldb_close(m_journal);
+            ldb_free(m_journal);
+            m_journal = nullptr;
+        }
+    }
+
+    journal_t(const journal_t &) = delete;
+    journal_t & operator=(const journal_t&) = delete;
+
+    journal_t(journal_t&& other) noexcept : journal_t() {
+        swap(*this, other);
+    }
+
+    journal_t & operator=(journal_t&& other) noexcept {
+        swap(*this, other);
+        return *this;
+    }
+
+    friend void swap(journal_t& first, journal_t& second) noexcept {
+        using std::swap;
+        swap(first.m_journal, second.m_journal);
+    }
+
+    int set_fsync(bool enable) {
+        return ldb_set_fsync(m_journal, enable);
+    }
+
+    int append(ldb_entry_t *entries, size_t len, size_t *num) { 
+        return ldb_append(m_journal, entries, len, num);
+    }
+
+    int read(uint64_t seqnum, ldb_entry_t *entries, size_t len, size_t *num) { 
+        return ldb_read(m_journal, seqnum, entries, len, num);
+    }
+
+    int stats(uint64_t seqnum1, uint64_t seqnum2, ldb_stats_t *stats) {
+        return ldb_stats(m_journal, seqnum1, seqnum2, stats);
+    }
+
+    int search(uint64_t ts, ldb_search_e mode, uint64_t *seqnum) {
+        return ldb_search(m_journal, ts, mode, seqnum);
+    }
+
+    long rollback(uint64_t seqnum) {
+        return ldb_rollback(m_journal, seqnum);
+    }
+
+    long purge(uint64_t seqnum) {
+        return ldb_purge(m_journal, seqnum);
+    }
+
+  private:
+
+    ldb_journal_t *m_journal = nullptr;
+};
+
+} // namespace ldb
+
 #endif
 
 #endif /* JOURNAL_H */
