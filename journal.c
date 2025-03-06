@@ -28,11 +28,28 @@
 #define LDB_EXT_TMP             ".tmp"
 #define LDB_PATH_SEPARATOR      "/"
 #define LDB_NAME_MAX_LENGTH     32 
-#define LDB_TEXT_LEN            128  /* value multiple of 8 to preserve alignment */
+#define LDB_TEXT_LEN            116
 #define LDB_TEXT_DAT            "\nThis is a ldb journal dat file.\nDon't edit it.\n"
 #define LDB_TEXT_IDX            "\nThis is a ldb journal idx file.\nDon't edit it.\n"
 #define LDB_MAGIC_NUMBER        0x211ABF1A62646C00
 #define LDB_FORMAT_1            1
+
+#if defined(__GNUC__) || defined(__clang__) || defined(__INTEL_LLVM_COMPILER) 
+    #define LDB_INLINE  __attribute__((const)) __attribute__((always_inline)) inline
+    #define PACKED      __attribute__((__packed__))
+#else
+    #define LDB_INLINE  /**/
+    #define PACKED      /**/
+#endif
+
+#if defined __has_attribute
+    #if __has_attribute(__fallthrough__)
+        # define fallthrough   __attribute__((__fallthrough__))
+    #endif
+#endif
+#ifndef fallthrough
+    # define fallthrough   do {} while (0)  /* fallthrough */
+#endif
 
 typedef struct ldb_impl_t
 {
@@ -57,19 +74,19 @@ typedef struct ldb_impl_t
 
 } ldb_impl_t;
 
-typedef struct ldb_header_dat_t {
+typedef struct PACKED ldb_header_dat_t {
     uint64_t magic_number;
     uint32_t format;
     char text[LDB_TEXT_LEN];
 } ldb_header_dat_t;
 
-typedef struct ldb_header_idx_t {
+typedef struct PACKED ldb_header_idx_t {
     uint64_t magic_number;
     uint32_t format;
     char text[LDB_TEXT_LEN];
 } ldb_header_idx_t;
 
-typedef struct ldb_record_dat_t {
+typedef struct PACKED ldb_record_dat_t {
     uint64_t seqnum;
     uint64_t timestamp;
     uint32_t metadata_len;
@@ -77,26 +94,11 @@ typedef struct ldb_record_dat_t {
     uint32_t checksum;
 } ldb_record_dat_t;
 
-typedef struct ldb_record_idx_t {
+typedef struct PACKED ldb_record_idx_t {
     uint64_t seqnum;
     uint64_t timestamp;
     uint64_t pos;
 } ldb_record_idx_t;
-
-#if defined(__GNUC__) || defined(__clang__) || defined(__INTEL_LLVM_COMPILER) 
-    #define LDB_INLINE     __attribute__((const)) __attribute__((always_inline)) inline
-#else
-    #define LDB_INLINE     /**/
-#endif
-
-#if defined __has_attribute
-    #if __has_attribute(__fallthrough__)
-        # define fallthrough   __attribute__((__fallthrough__))
-    #endif
-#endif
-#ifndef fallthrough
-    # define fallthrough   do {} while (0)  /* fallthrough */
-#endif
 
 /* generated using the AUTODIN II polynomial
  *    x^32 + x^26 + x^23 + x^22 + x^16 +
@@ -440,7 +442,7 @@ static bool ldb_create_file_dat(const char *path)
         .text = {0}
     };
 
-    memset(header.text, 0, sizeof(header.text));
+    memset(header.text, 0x0, sizeof(header.text));
     strncpy(header.text, LDB_TEXT_DAT, sizeof(header.text));
 
     if (fwrite(&header, sizeof(ldb_header_dat_t), 1, fp) != 1)
@@ -473,6 +475,7 @@ static bool ldb_create_file_idx(const char *path)
         .text = {0}
     };
 
+    memset(header.text, 0x0, sizeof(header.text));
     strncpy(header.text, LDB_TEXT_IDX, sizeof(header.text));
 
     if (fwrite(&header, sizeof(ldb_header_idx_t), 1, fp) != 1)
