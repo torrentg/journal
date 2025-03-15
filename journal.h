@@ -138,12 +138,11 @@ SOFTWARE.
 #define LDB_ERR_FMT_IDX          -13
 #define LDB_ERR_ENTRY_SEQNUM     -14
 #define LDB_ERR_ENTRY_TIMESTAMP  -15
-#define LDB_ERR_ENTRY_METADATA   -16
-#define LDB_ERR_ENTRY_DATA       -17
-#define LDB_ERR_NOT_FOUND        -18
-#define LDB_ERR_TMP_FILE         -19
-#define LDB_ERR_CHECKSUM         -20
-#define LDB_ERR_LOCK             -21
+#define LDB_ERR_ENTRY_DATA       -16
+#define LDB_ERR_NOT_FOUND        -17
+#define LDB_ERR_TMP_FILE         -18
+#define LDB_ERR_CHECKSUM         -19
+#define LDB_ERR_LOCK             -20
 
 #ifdef __cplusplus
 extern "C" {
@@ -167,9 +166,7 @@ typedef struct ldb_state_t {
 typedef struct ldb_entry_t {
     uint64_t seqnum;              // Sequence number (0 = system assigned).
     uint64_t timestamp;           // Timestamp (0 = system assigned).
-    uint32_t metadata_len;        // Length of metadata (in bytes).
     uint32_t data_len;            // Length of data (in bytes).
-    void *metadata;               // Pointer to metadata.
     void *data;                   // Pointer to data.
 } ldb_entry_t;
 

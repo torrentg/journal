@@ -4,7 +4,6 @@
 
 void append_entries(ldb_journal_t *journal, uint64_t seqnum1, uint64_t seqnum2)
 {
-    char metadata[128] = {0};
     char data[128] = {0};
 
     if (seqnum2 < seqnum1)
@@ -12,7 +11,6 @@ void append_entries(ldb_journal_t *journal, uint64_t seqnum1, uint64_t seqnum2)
 
     while (seqnum1 <= seqnum2)
     {
-        snprintf(metadata, sizeof(metadata), "metadata-%d", (int) seqnum1);
         snprintf(data, sizeof(data), "data-%d", (int) seqnum1);
 
         // timestamp value equals seqnum to the ten
@@ -21,9 +19,7 @@ void append_entries(ldb_journal_t *journal, uint64_t seqnum1, uint64_t seqnum2)
         ldb_entry_t entry = {
             .seqnum = seqnum1,
             .timestamp = seqnum1 - (seqnum1 % 10),
-            .metadata_len = (uint32_t) strlen(metadata) + 1,
             .data_len = (uint32_t) strlen(data) + 1,
-            .metadata = metadata,
             .data = data
         };
 
@@ -65,11 +61,11 @@ void test_strerror(void)
     const char *unknown_error = ldb_strerror(-999);
     TEST_ASSERT(unknown_error != NULL);
 
-    for (int i = 0; i < 22; i++) {
+    for (int i = 0; i < 21; i++) {
         TEST_ASSERT(ldb_strerror(-i) != NULL);
         TEST_ASSERT(strcmp(ldb_strerror(-i), unknown_error) != 0);
     }
-    for (int i = 22; i < 32; i++) {
+    for (int i = 21; i < 32; i++) {
         TEST_ASSERT(ldb_strerror(-i) != NULL);
         TEST_ASSERT(strcmp(ldb_strerror(-i), unknown_error) == 0);
     }
@@ -318,7 +314,6 @@ void test_open_and_repair_1(void)
     record.seqnum = 1;
     record.timestamp = 0;
     record.data_len = 1000;    // has data length but data not added after record
-    record.metadata_len = 54;  // has data length but data not added after record
     fwrite(&record, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
     ldb_close(&journal);
 
@@ -343,10 +338,8 @@ void test_open_and_repair_2(void)
     ldb_entry_t entry = {
         .seqnum = 10,
         .timestamp = 3,
-        .metadata_len = 10,
         .data_len = 21640,
-        .metadata = (char *) data,
-        .data = (char *) data + 10
+        .data = (char *) data
     };
     TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_OK);
 
@@ -354,7 +347,6 @@ void test_open_and_repair_2(void)
     ldb_record_dat_t record = {
         .seqnum = 0,
         .timestamp = 0,
-        .metadata_len = 40,
         .data_len = 400,
     };
     fwrite(&record, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
@@ -386,10 +378,8 @@ void test_open_and_repair_3(void)
     ldb_entry_t entry = {
         .seqnum = 10,
         .timestamp = 3,
-        .metadata_len = 40,
         .data_len = 400,
-        .metadata = (char *) data,
-        .data = (char *) data + 40
+        .data = (char *) data
     };
     TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_OK);
 
@@ -397,12 +387,11 @@ void test_open_and_repair_3(void)
     ldb_record_dat_t record = {
         .seqnum = entry.seqnum + 1,
         .timestamp = 3,
-        .metadata_len = 40,
         .data_len = 400,
         .checksum = 999       // invalid but checked after data length
     };
     fwrite(&record, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
-    fwrite(data, record.metadata_len + record.data_len - 10, 1, journal.dat_fp);
+    fwrite(data, record.data_len - 10, 1, journal.dat_fp);
     ldb_close(&journal);
 
     // second record (incomplete) is zeroized
@@ -423,14 +412,11 @@ void test_open_1_entry_ok(void)
     TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
 
     // inserting 1 entry
-    const char metadata[] = "metadata-1";
     const char data[] = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
     ldb_entry_t entry = {
         .seqnum = 10,
         .timestamp = 3,
-        .metadata_len = (uint32_t) strlen(metadata),
         .data_len = (uint32_t) strlen(data),
-        .metadata = (char *) metadata,
         .data = (char *) data
     };
     TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_OK);
@@ -442,7 +428,7 @@ void test_open_1_entry_ok(void)
     TEST_ASSERT(journal.state.timestamp1 == 3);
     TEST_ASSERT(journal.state.seqnum2 == 10);
     TEST_ASSERT(journal.state.timestamp2 == 3);
-    TEST_ASSERT(journal.dat_end == sizeof(ldb_header_dat_t) + sizeof(ldb_record_dat_t) + entry.metadata_len + entry.data_len);
+    TEST_ASSERT(journal.dat_end == sizeof(ldb_header_dat_t) + sizeof(ldb_record_dat_t) + entry.data_len);
     ldb_close(&journal);
 
     // open journal with 1-entry (idx no rebuilded)
@@ -498,17 +484,16 @@ void _test_open_rollbacked_ok(bool check)
     {
         record_dat.seqnum = i;
         record_dat.timestamp = 1000 + i;
-        record_dat.metadata_len = 6;
         record_dat.data_len = 20 + i;
         checksum = ldb_checksum_record(&record_dat);
-        record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum);
+        record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum);
 
         record_idx.seqnum = record_dat.seqnum;
         record_idx.timestamp = record_dat.timestamp;
         record_idx.pos = ftell(journal.dat_fp);
 
         fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
-        fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
+        fwrite(data, record_dat.data_len, 1, journal.dat_fp);
 
         fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, journal.idx_fp);
     }
@@ -552,22 +537,20 @@ void test_open_dat_check_fails(void)
     // inserting entry-1
     record_dat.seqnum = 10;
     record_dat.timestamp = 10;
-    record_dat.metadata_len = 6;
     record_dat.data_len = 20;
     checksum = ldb_checksum_record(&record_dat);
-    record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum);
+    record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum);
     fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
-    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
+    fwrite(data, record_dat.data_len, 1, journal.dat_fp);
 
     // inserting entry-2 (broken sequence)
     record_dat.seqnum = 16;
     record_dat.timestamp = 10;
-    record_dat.metadata_len = 6;
     record_dat.data_len = 20;
     checksum = ldb_checksum_record(&record_dat);
-    record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum);
+    record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum);
     fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
-    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
+    fwrite(data, record_dat.data_len, 1, journal.dat_fp);
 
     ldb_close(&journal);
 
@@ -591,22 +574,20 @@ void test_open_dat_corrupted(void)
     // inserting entry-1
     record_dat.seqnum = 10;
     record_dat.timestamp = 10;
-    record_dat.metadata_len = 6;
     record_dat.data_len = 20;
     checksum = ldb_checksum_record(&record_dat);
-    record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum);
+    record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum);
     fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
-    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
+    fwrite(data, record_dat.data_len, 1, journal.dat_fp);
 
     // inserting entry-2 (incorrect checksum)
     record_dat.seqnum = 11;
     record_dat.timestamp = 11;
-    record_dat.metadata_len = 6;
     record_dat.data_len = 20;
     checksum = ldb_checksum_record(&record_dat);
-    record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum) + 999;
+    record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum) + 999;
     fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
-    fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
+    fwrite(data, record_dat.data_len, 1, journal.dat_fp);
 
     ldb_close(&journal);
 
@@ -633,17 +614,16 @@ void test_open_idx_check_fails_1(void)
     {
         record_dat.seqnum = i;
         record_dat.timestamp = 1000 + i;
-        record_dat.metadata_len = 6;
         record_dat.data_len = 20 + i;
         checksum = ldb_checksum_record(&record_dat);
-        record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum);
+        record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum);
 
         record_idx.seqnum = record_dat.seqnum + (i == 12 ? 5 : 0); // seqnum mismatch
         record_idx.timestamp = record_dat.timestamp;
         record_idx.pos = ftell(journal.dat_fp);
 
         fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
-        fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
+        fwrite(data, record_dat.data_len, 1, journal.dat_fp);
 
         fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, journal.idx_fp);
     }
@@ -677,17 +657,16 @@ void test_open_idx_check_fails_2(void)
     {
         record_dat.seqnum = i;
         record_dat.timestamp = 1000 + i;
-        record_dat.metadata_len = 6;
         record_dat.data_len = 20 + i;
         checksum = ldb_checksum_record(&record_dat);
-        record_dat.checksum = ldb_crc32(data, record_dat.metadata_len + record_dat.data_len, checksum);
+        record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum);
 
         record_idx.seqnum = record_dat.seqnum;
         record_idx.timestamp = record_dat.timestamp;
         record_idx.pos = ftell(journal.dat_fp) + (i == 12 ? 5 : 0); // invalid pos
 
         fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
-        fwrite(data, record_dat.metadata_len + record_dat.data_len, 1, journal.dat_fp);
+        fwrite(data, record_dat.data_len, 1, journal.dat_fp);
 
         fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, journal.idx_fp);
     }
@@ -707,62 +686,34 @@ void test_alloc_free_entry(void)
     char *ptr = NULL;
     ldb_entry_t entry = {0};
 
-    TEST_ASSERT(!ldb_alloc_entry(NULL, 0, 0));
+    TEST_ASSERT(!ldb_alloc_entry(NULL, 0));
     ldb_free_entry(NULL);
 
-    TEST_ASSERT(ldb_alloc_entry(&entry, 0, 0));
+    TEST_ASSERT(ldb_alloc_entry(&entry, 0));
     TEST_ASSERT(entry.data == NULL);
-    TEST_ASSERT(entry.metadata == NULL);
     TEST_ASSERT(entry.data_len == 0);
-    TEST_ASSERT(entry.metadata_len == 0);
     ldb_free_entry(&entry);
 
-    TEST_ASSERT(ldb_alloc_entry(&entry, 7, 11));
-    TEST_ASSERT(entry.metadata_len == 7);
+    TEST_ASSERT(ldb_alloc_entry(&entry, 11));
     TEST_ASSERT(entry.data_len == 11);
-    TEST_ASSERT((size_t)(entry.metadata) % sizeof(void*) == 0);
     TEST_ASSERT((size_t)(entry.data) % sizeof(void*) == 0);
     ldb_free_entry(&entry);
 
-    TEST_ASSERT(ldb_alloc_entry(&entry, 7, 11));
-    ptr = entry.metadata;
-    TEST_ASSERT(ldb_alloc_entry(&entry, 2, 5));
-    TEST_ASSERT(entry.metadata_len == 2);
+    // case: mem reused
+    TEST_ASSERT(ldb_alloc_entry(&entry, 11));
+    ptr = entry.data;
+    TEST_ASSERT(ldb_alloc_entry(&entry, 5));
     TEST_ASSERT(entry.data_len == 5);
-    TEST_ASSERT(entry.metadata == ptr);
-    TEST_ASSERT(entry.data == ptr + 8);
+    TEST_ASSERT(entry.data == ptr);
     ldb_free_entry(&entry);
 
-    TEST_ASSERT(ldb_alloc_entry(&entry, 0, 11));
-    TEST_ASSERT(entry.metadata_len == 0);
-    TEST_ASSERT(entry.data_len == 11);
-    TEST_ASSERT(entry.metadata != NULL);
-    TEST_ASSERT(entry.metadata == entry.data);
-    ptr = entry.metadata;
-
-    TEST_ASSERT(ldb_alloc_entry(&entry, 2, 5));
-    TEST_ASSERT(entry.metadata_len == 2);
-    TEST_ASSERT(entry.data_len == 5);
-    TEST_ASSERT(entry.metadata == ptr);
-    TEST_ASSERT(entry.data == ptr + sizeof(void*));
-    ldb_free_entry(&entry);
-
-    TEST_ASSERT(ldb_alloc_entry(&entry, 11, 0));
-    TEST_ASSERT(entry.metadata_len == 11);
-    TEST_ASSERT(entry.data_len == 0);
-    TEST_ASSERT(entry.metadata != NULL);
-    TEST_ASSERT(entry.data == entry.metadata);
-    ptr = entry.metadata;
-
-    // used to 'force' an allocation just after the previous one
-    // avoiding a realloc was done in the same place
+    // we reserve a chunk of memory to 'force' an allocation just after 
+    // the previous one avoiding a realloc was done in the same place
     char *aux = (char *) calloc(1000,1);
 
-    TEST_ASSERT(ldb_alloc_entry(&entry, 2, 5000));
-    TEST_ASSERT(entry.metadata_len == 2);
+    TEST_ASSERT(ldb_alloc_entry(&entry, 5000));
     TEST_ASSERT(entry.data_len == 5000);
-    TEST_ASSERT(entry.metadata != ptr); // this test can fail if mem is reallocated in the same place
-    TEST_ASSERT((char *) entry.data == (char *) entry.metadata + sizeof(void*));
+    TEST_ASSERT(entry.data != ptr); // this test can fail if mem is reallocated in the same place
     ldb_free_entry(&entry);
 
     free(aux);
@@ -776,17 +727,13 @@ void test_alloc_free_entries(void)
     ldb_free_entries(NULL, 3);
     ldb_free_entries(entries, 0);
 
-    for (int i = 0; i < 3; i++) {
-        entries[i].metadata = (char *) malloc(10);
-        entries[i].data = (char *) entries[i].metadata + 4;
-    }
+    for (int i = 0; i < 3; i++)
+        entries[i].data = (char *) malloc(10);
 
     ldb_free_entries(entries, 3);
 
-    for (int i = 0; i < 3; i++) {
-        TEST_ASSERT(entries[i].metadata == NULL);
+    for (int i = 0; i < 3; i++)
         TEST_ASSERT(entries[i].data == NULL);
-    }
 }
 
 void test_append_invalid_args(void)
@@ -836,9 +783,6 @@ void test_append_auto(void)
     for (size_t i = 0; i < len; i++) {
         entries[i].seqnum = 0;
         entries[i].timestamp = 0;
-        snprintf(buf, sizeof(buf), "metadata-%d", (int) i);
-        entries[i].metadata = strdup(buf);
-        entries[i].metadata_len = strlen(buf) + 1;
         snprintf(buf, sizeof(buf), "data-%d", (int) i);
         entries[i].data = strdup(buf);
         entries[i].data_len = strlen(buf) + 1;
@@ -875,10 +819,8 @@ void test_append_auto(void)
     ldb_close(&journal);
 
     // dealloc entries ()
-    for (size_t i = 0; i < len; i++) {
-        free(entries[i].metadata);
+    for (size_t i = 0; i < len; i++)
         free(entries[i].data);
-    }
 }
 
 void test_append_nominal_case(void)
@@ -899,9 +841,6 @@ void test_append_nominal_case(void)
     for (size_t i = 0; i < len; i++) {
         entries[i].seqnum = 10 + i;
         entries[i].timestamp = 10000 + i;
-        snprintf(buf, sizeof(buf), "metadata-%d", (int) i);
-        entries[i].metadata = strdup(buf);
-        entries[i].metadata_len = strlen(buf) + 1;
         snprintf(buf, sizeof(buf), "data-%d", (int) i);
         entries[i].data = strdup(buf);
         entries[i].data_len = strlen(buf) + 1;
@@ -915,10 +854,8 @@ void test_append_nominal_case(void)
     ldb_close(&journal);
 
     // dealloc entries ()
-    for (size_t i = 0; i < len; i++) {
-        free(entries[i].metadata);
+    for (size_t i = 0; i < len; i++)
         free(entries[i].data);
-    }
 }
 
 void test_append_broken_sequence(void)
@@ -939,9 +876,6 @@ void test_append_broken_sequence(void)
     for (size_t i = 0; i < len; i++) {
         entries[i].seqnum = 10 + i + (i == 5 ? 40 : 0);
         entries[i].timestamp = 10000 + i;
-        snprintf(buf, sizeof(buf), "metadata-%d", (int) i);
-        entries[i].metadata = strdup(buf);
-        entries[i].metadata_len = strlen(buf) + 1;
         snprintf(buf, sizeof(buf), "data-%d", (int) i);
         entries[i].data = strdup(buf);
         entries[i].data_len = strlen(buf) + 1;
@@ -955,10 +889,8 @@ void test_append_broken_sequence(void)
     ldb_close(&journal);
 
     // dealloc entries ()
-    for (size_t i = 0; i < len; i++) {
-        free(entries[i].metadata);
+    for (size_t i = 0; i < len; i++)
         free(entries[i].data);
-    }
 }
 
 void test_append_lack_of_data(void)
@@ -967,9 +899,7 @@ void test_append_lack_of_data(void)
     ldb_entry_t entry = {
         .seqnum = 10,
         .timestamp = 1000,
-        .metadata_len = 0,
-        .data_len = 0,
-        .metadata = NULL,
+        .data_len = 40,
         .data = NULL
     };
 
@@ -978,25 +908,18 @@ void test_append_lack_of_data(void)
 
     // create empty journal
     TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
-    entry.metadata_len = 40;
-
-    TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_ERR_ENTRY_METADATA);
-    entry.metadata_len = 0;
-    entry.data_len = 40;
 
     TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_ERR_ENTRY_DATA);
 
     ldb_close(&journal);
 }
 
-bool check_entry(ldb_entry_t *entry, uint64_t seqnum, const char *metadata, const char *data)
+bool check_entry(ldb_entry_t *entry, uint64_t seqnum, const char *data)
 {
     return (entry && 
             entry->seqnum == seqnum &&
             entry->data_len == (data == NULL ? 0 : strlen(data) + 1) &&
-            entry->metadata_len == (metadata == NULL ? 0 : strlen(metadata) + 1) &&
-            (entry->data == data || (entry->data != NULL && data != NULL && strcmp(entry->data, data) == 0)) &&
-            (entry->metadata == metadata || (entry->metadata != NULL && metadata != NULL && strcmp(entry->metadata, metadata) == 0)));
+            (entry->data == data || (entry->data != NULL && data != NULL && strcmp(entry->data, data) == 0)));
 }
 
 void test_read_invalid_args(void)
@@ -1053,19 +976,19 @@ void test_read_nominal_case(void)
 
     TEST_ASSERT(ldb_read(&journal, 20, entries, 3, &num) == LDB_OK);
     TEST_ASSERT(num == 3);
-    TEST_ASSERT(check_entry(&entries[0], 20, "metadata-20", "data-20"));
-    TEST_ASSERT(check_entry(&entries[1], 21, "metadata-21", "data-21"));
-    TEST_ASSERT(check_entry(&entries[2], 22, "metadata-22", "data-22"));
+    TEST_ASSERT(check_entry(&entries[0], 20, "data-20"));
+    TEST_ASSERT(check_entry(&entries[1], 21, "data-21"));
+    TEST_ASSERT(check_entry(&entries[2], 22, "data-22"));
 
     TEST_ASSERT(ldb_read(&journal, 40, entries, 2, &num) == LDB_OK);
     TEST_ASSERT(num == 2);
-    TEST_ASSERT(check_entry(&entries[0], 40, "metadata-40", "data-40"));
-    TEST_ASSERT(check_entry(&entries[1], 41, "metadata-41", "data-41"));
+    TEST_ASSERT(check_entry(&entries[0], 40, "data-40"));
+    TEST_ASSERT(check_entry(&entries[1], 41, "data-41"));
 
     TEST_ASSERT(ldb_read(&journal, 313, entries, 3, &num) == LDB_OK);
     TEST_ASSERT(num == 2);
-    TEST_ASSERT(check_entry(&entries[0], 313, "metadata-313", "data-313"));
-    TEST_ASSERT(check_entry(&entries[1], 314, "metadata-314", "data-314"));
+    TEST_ASSERT(check_entry(&entries[0], 313, "data-313"));
+    TEST_ASSERT(check_entry(&entries[1], 314, "data-314"));
 
     TEST_ASSERT(ldb_read(&journal, 400, entries, 3, &num) == LDB_ERR_NOT_FOUND);
     TEST_ASSERT(num == 0);

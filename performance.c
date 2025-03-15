@@ -163,8 +163,6 @@ static void * run_write(void *args)
     // In this case we use fixed-length records filled with 0's
     // to avoid to deal with memory alloc and fill it with random content.
     for (size_t i = 0; i < num_entries; i++) {
-        entries[i].metadata_len = 0;
-        entries[i].metadata = NULL;
         entries[i].data_len = params->bytes_per_record;
         entries[i].data = data;
     }
@@ -246,7 +244,7 @@ static void * run_read(void *args)
             results->num_records += num;
 
             for (size_t i = 0; i < num ; i++)
-                results->num_bytes += entries[i].metadata_len + entries[i].data_len;
+                results->num_bytes += entries[i].data_len;
         }
 
         while (true)

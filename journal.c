@@ -89,7 +89,6 @@ typedef struct PACKED ldb_header_idx_t {
 typedef struct PACKED ldb_record_dat_t {
     uint64_t seqnum;
     uint64_t timestamp;
-    uint32_t metadata_len;
     uint32_t data_len;
     uint32_t checksum;
 } ldb_record_dat_t;
@@ -187,7 +186,6 @@ const char * ldb_strerror(int errnum)
         case LDB_ERR_FMT_IDX: return "Invalid idx file";
         case LDB_ERR_ENTRY_SEQNUM: return "Broken sequence";
         case LDB_ERR_ENTRY_TIMESTAMP: return "Invalid timestamp";
-        case LDB_ERR_ENTRY_METADATA: return "Metadata not found";
         case LDB_ERR_ENTRY_DATA: return "Data not found";
         case LDB_ERR_NOT_FOUND: return "No results";
         case LDB_ERR_TMP_FILE: return "Error creating temp file";
@@ -306,12 +304,9 @@ void ldb_free_entry(ldb_entry_t *entry)
     if (entry == NULL)
         return;
 
-    // ldb_alloc_entry() does only 1 mem allocation
-    free(entry->metadata);
+    free(entry->data);
 
-    entry->metadata = NULL;
     entry->data = NULL;
-    entry->metadata_len = 0;
     entry->data_len = 0;
 }
 
@@ -335,35 +330,30 @@ static size_t ldb_allocated_size(size_t size) {
 // otherwise, free existent memory and does only 1 memory allocation
 // both returned pointer are aligned to generic type intptr_t
 // returns false on error (allocation error)
-static bool ldb_alloc_entry(ldb_entry_t *entry, uint32_t metadata_len, uint32_t data_len)
+static bool ldb_alloc_entry(ldb_entry_t *entry, uint32_t data_len)
 {
     if (entry == NULL)
         return false;
 
-    if ((entry->metadata_len > 0 && entry->metadata == NULL) ||
-        (entry->data_len > 0 && entry->data == NULL) ||
-        (entry->metadata == NULL && entry->data != NULL))
+    if (entry->data_len > 0 && entry->data == NULL)
         return false;
 
-    size_t len1 = ldb_allocated_size(metadata_len);
-    size_t len2 = ldb_allocated_size(data_len);
-    assert((len1 + len2) % sizeof(intptr_t) == 0);
+    size_t len = ldb_allocated_size(data_len);
+    assert(len % sizeof(intptr_t) == 0);
 
     char *ptr = NULL;
 
-    if (len1 + len2 <= ldb_allocated_size(entry->metadata_len) + ldb_allocated_size(entry->data_len)) {
-        ptr = entry->metadata ? entry->metadata : (entry->data ? entry->data : NULL);
+    if (len <= ldb_allocated_size(entry->data_len)) {
+        ptr = entry->data;
     }
     else {
         ldb_free_entry(entry);
-        ptr = (char *) calloc((len1 + len2)/sizeof(intptr_t), sizeof(intptr_t));
+        ptr = (char *) calloc(len/sizeof(intptr_t), sizeof(intptr_t));
         if (ptr == NULL)
             return false;
     }
 
-    entry->metadata = ptr;
-    entry->metadata_len = metadata_len;
-    entry->data = ptr + (data_len == 0 ? 0 : len1);
+    entry->data = ptr;
     entry->data_len = data_len;
 
     return true;
@@ -617,11 +607,9 @@ static uint32_t ldb_checksum_record(ldb_record_dat_t *record)
 
     checksum = ldb_crc32((const char *) &record->seqnum, sizeof(record->seqnum), checksum);
     checksum = ldb_crc32((const char *) &record->timestamp, sizeof(record->timestamp), checksum);
-    checksum = ldb_crc32((const char *) &record->metadata_len, sizeof(record->metadata_len), checksum);
     checksum = ldb_crc32((const char *) &record->data_len, sizeof(record->data_len), checksum);
 
     // required calls to complete the checksum
-    // call checksum = crc32(metadata, checksum)
     // call checksum = crc32(data, checksum)
 
     return checksum;
@@ -633,11 +621,7 @@ static uint32_t ldb_checksum_entry(ldb_entry_t *entry)
 
     checksum = ldb_crc32((const char *) &entry->seqnum, sizeof(entry->seqnum), checksum);
     checksum = ldb_crc32((const char *) &entry->timestamp, sizeof(entry->timestamp), checksum);
-    checksum = ldb_crc32((const char *) &entry->metadata_len, sizeof(entry->metadata_len), checksum);
     checksum = ldb_crc32((const char *) &entry->data_len, sizeof(entry->data_len), checksum);
-
-    if (entry->metadata_len && entry->metadata)
-        checksum = ldb_crc32(entry->metadata, entry->metadata_len, checksum);
 
     if (entry->data_len && entry->data)
         checksum = ldb_crc32(entry->data, entry->data_len, checksum);
@@ -657,9 +641,6 @@ static int ldb_append_entry_dat(ldb_impl_t *obj, ldb_state_t *state, ldb_entry_t
     assert(!feof(obj->dat_fp));
     assert(!ferror(obj->dat_fp));
 
-    if (entry->metadata_len != 0 && entry->metadata == NULL)
-        return LDB_ERR_ENTRY_METADATA;
-
     if (entry->data_len != 0 && entry->data == NULL)
         return LDB_ERR_ENTRY_DATA;
 
@@ -672,7 +653,6 @@ static int ldb_append_entry_dat(ldb_impl_t *obj, ldb_state_t *state, ldb_entry_t
     ldb_record_dat_t record = {
         .seqnum = entry->seqnum,
         .timestamp = entry->timestamp,
-        .metadata_len = entry->metadata_len,
         .data_len = entry->data_len,
         .checksum = ldb_checksum_entry(entry)
     };
@@ -682,10 +662,6 @@ static int ldb_append_entry_dat(ldb_impl_t *obj, ldb_state_t *state, ldb_entry_t
 
     if (fwrite(&record, sizeof(ldb_record_dat_t), 1, obj->dat_fp) != 1)
         return LDB_ERR_WRITE_DAT;
-
-    if (record.metadata_len)
-        if (fwrite(entry->metadata, 1, record.metadata_len, obj->dat_fp) != record.metadata_len)
-            return LDB_ERR_WRITE_DAT;
 
     if (record.data_len)
         if (fwrite(entry->data, 1, record.data_len, obj->dat_fp) != record.data_len)
@@ -751,7 +727,7 @@ static int ldb_read_record_dat(int fd, size_t pos, ldb_record_dat_t *record, boo
         return LDB_OK;
 
     uint32_t checksum = ldb_checksum_record(record);
-    size_t len = record->metadata_len + record->data_len;
+    size_t len = record->data_len;
 
     if (len > 0)
     {
@@ -784,7 +760,7 @@ static int ldb_read_record_dat(int fd, size_t pos, ldb_record_dat_t *record, boo
     return LDB_OK;
 }
 
-// Read data entry (record + metadata + data) at pos.
+// Read data entry (record + data) at pos.
 // File position is not modified.
 static int ldb_read_entry_dat(int fd, size_t pos, ldb_entry_t *entry)
 {
@@ -798,24 +774,10 @@ static int ldb_read_entry_dat(int fd, size_t pos, ldb_entry_t *entry)
     if ((ret = ldb_read_record_dat(fd, pos, &record, false)) != LDB_OK)
         return ret;
 
-    if (!ldb_alloc_entry(entry, record.metadata_len, record.data_len))
+    if (!ldb_alloc_entry(entry, record.data_len))
         return LDB_ERR_MEM;
 
     pos += sizeof(ldb_record_dat_t);
-
-    if (record.metadata_len)
-    {
-        assert(entry->metadata != NULL);
-        rc = pread(fd, entry->metadata, record.metadata_len, (off_t) pos);
-
-        if (rc == -1)
-            return LDB_ERR_READ_DAT;
-
-        if (rc != (ssize_t) record.metadata_len)
-            return LDB_ERR_FMT_DAT;
-
-        pos += record.metadata_len;
-    }
 
     if (record.data_len)
     {
@@ -947,7 +909,7 @@ static int ldb_open_file_dat(ldb_impl_t *obj, bool check)
     if (record.seqnum == 0)
         goto LDB_OPEN_FILE_DAT_ZEROIZE;
 
-    pos += sizeof(ldb_record_dat_t) + record.metadata_len + record.data_len;
+    pos += sizeof(ldb_record_dat_t) + record.data_len;
 
     obj->state.seqnum1 = record.seqnum;
     obj->state.timestamp1 = record.timestamp;
@@ -978,7 +940,7 @@ static int ldb_open_file_dat(ldb_impl_t *obj, bool check)
         if (record.timestamp < obj->state.timestamp2)
             exit_function(LDB_ERR_FMT_DAT);
 
-        pos += sizeof(ldb_record_dat_t) + record.metadata_len + record.data_len;
+        pos += sizeof(ldb_record_dat_t) + record.data_len;
 
         obj->state.seqnum2 = record.seqnum;
         obj->state.timestamp2 = record.timestamp;
@@ -1206,7 +1168,7 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
     if (record_dat.seqnum != record_n.seqnum || record_dat.timestamp != record_n.timestamp)
         exit_function(LDB_ERR_FMT_IDX);
 
-    pos += sizeof(ldb_record_dat_t) + record_dat.metadata_len + record_dat.data_len;
+    pos += sizeof(ldb_record_dat_t) + record_dat.data_len;
 
     obj->dat_end = pos;
 
@@ -1231,7 +1193,7 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
         record_n.timestamp = record_dat.timestamp;
         record_n.pos = pos;
 
-        size_t rec_len = sizeof(ldb_record_dat_t) + record_dat.metadata_len + record_dat.data_len;
+        size_t rec_len = sizeof(ldb_record_dat_t) + record_dat.data_len;
         if (pos + rec_len > len)
             break; // zeroize
 
@@ -1544,8 +1506,7 @@ int ldb_stats(ldb_impl_t *obj, uint64_t seqnum1, uint64_t seqnum2, ldb_stats_t *
     stats->max_timestamp = record2.timestamp;
     stats->num_entries = seqnum2 - seqnum1 + 1;
     stats->index_size = sizeof(ldb_record_idx_t) * stats->num_entries;
-    stats->data_size = record2.pos - record1.pos + sizeof(ldb_record_dat_t) +
-                       record_dat.metadata_len + record_dat.data_len;
+    stats->data_size = record2.pos - record1.pos + sizeof(ldb_record_dat_t) + record_dat.data_len;
 
     ret = LDB_OK;
 

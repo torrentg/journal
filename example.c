@@ -20,18 +20,15 @@ ldb_entry_t create_random_entry(size_t seqnum, size_t timestamp) {
     return (ldb_entry_t) {
         .seqnum = seqnum,
         .timestamp = timestamp,
-        .metadata = (char *) lorem + (rand() % (sizeof(lorem) - 11)),
-        .metadata_len = 10,
         .data = (char *) lorem + (rand() % (sizeof(lorem) - 21)),
         .data_len = 20
     };
 }
 
 void print_entry(const char *prefix, const ldb_entry_t *entry) {
-    printf("%s{ seqnum=%zu, timestamp=%zu, metadata='%.*s', data='%.*s' }\n", 
+    printf("%s{ seqnum=%zu, timestamp=%zu, data='%.*s' }\n", 
             prefix,
             entry->seqnum, entry->timestamp, 
-            entry->metadata_len, (char *) entry->metadata, 
             entry->data_len, (char *) entry->data);
 }
 
