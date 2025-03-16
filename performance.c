@@ -248,7 +248,7 @@ static void * run_read(void *args)
 
             seqnum = stats.min_seqnum + rand() % stats.num_entries;
 
-            if ((results->rc = ldb_direct_read(journal, seqnum, entries, num_entries, buf, buf_len, &num)) != LDB_OK)
+            if ((results->rc = ldb_read(journal, seqnum, entries, num_entries, buf, buf_len, &num)) != LDB_OK)
                 break;
 
             results->num_queries += (num > 0 ? 1 : 0);

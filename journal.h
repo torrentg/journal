@@ -296,7 +296,15 @@ int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num
 /**
  * Reads num entries starting from seqnum (included).
  * 
- * This function receives a buffer memory where disk entries are copied as-is.
+ * Performance note:
+ *   Using a sufficiently large buffer is crucial for optimal performance as it:
+ *   - Minimizes the number of read() system calls (expensive operations)
+ *   - Takes advantage of sequential I/O patterns
+ *   - Reduces context switches between user and kernel space
+ * 
+ * This function uses the pre-allocated buffer to bulk the disk data as-is,
+ * significantly reducing the number of system calls and improving performance.
+ * Returned data entries (entries[x].data) are aligned to sizeof(uintptr_t).
  * 
  * On success:
  *   - Returns LDB_OK
@@ -307,8 +315,8 @@ int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num
  *     - if entries[num].rev == 0 => last record reached
  *     - if entries[num].rev != 0 => not enough memory in buffer
  *          entries[num] is filled correctly but data pointer is NULL
- *          use this info to reallocate buffer if required and to call ldb_direct_read() again
- *          add a minimum of 24 bytes to the buffer length to avoid this situation
+ *          use this info to reallocate buffer if required and to call ldb_read() again
+ *          add at least entries[num].data_len + 24 to the buffer length
  *   - unused entries are signaled with seqnum = 0
  * 
  * @param[in] obj Journal to use.
@@ -324,7 +332,7 @@ int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num
  * 
  * @return Error code (0 = OK).
  */
-int ldb_direct_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len, char *buf, size_t buf_len, size_t *num);
+int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len, char *buf, size_t buf_len, size_t *num);
 
 /**
  * Return statistics between seqnum1 and seqnum2 (both included).
@@ -460,7 +468,7 @@ class journal_t
     }
 
     int read(uint64_t seqnum, ldb_entry_t *entries, size_t len, char *buf, size_t buf_len, size_t *num) { 
-        return ldb_direct_read(m_journal, seqnum, entries, len, buf, buf_len, num);
+        return ldb_read(m_journal, seqnum, entries, len, buf, buf_len, num);
     }
 
     int stats(uint64_t seqnum1, uint64_t seqnum2, ldb_stats_t *stats) {

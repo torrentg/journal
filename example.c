@@ -101,10 +101,10 @@ int run(ldb_journal_t *journal)
     /// timestamp of last entry
     timestamp = entries[MAX_ENTRIES-1].timestamp;
 
-    rc = ldb_direct_read(journal, 1001, &entry, 1, buf, buf_len, NULL);
+    rc = ldb_read(journal, 1001, &entry, 1, buf, buf_len, NULL);
     print_result("read existing entry (sn=1001)", rc);
 
-    rc = ldb_direct_read(journal, 9999, &entry, 1, buf, buf_len, NULL);
+    rc = ldb_read(journal, 9999, &entry, 1, buf, buf_len, NULL);
     print_result("read non-existing entry (sn=9999)", rc);
 
     // we need to allocate/reallocate the buffer to store the data
@@ -121,7 +121,7 @@ int run(ldb_journal_t *journal)
     }
 
     // you can read multiple entries in a row
-    rc = ldb_direct_read(journal, 1010, entries, MAX_ENTRIES, buf, buf_len, &num);
+    rc = ldb_read(journal, 1010, entries, MAX_ENTRIES, buf, buf_len, &num);
     print_result("read %d entries starting at 1010 (read-entries=%zu)", rc, MAX_ENTRIES, num);
 
     rc = ldb_stats(journal, 0, 9999, &stats);
@@ -182,7 +182,7 @@ int run(ldb_journal_t *journal)
             }
         }
     
-        ldb_direct_read(journal, sn, entries, MAX_ENTRIES, buf, buf_len, &num);
+        ldb_read(journal, sn, entries, MAX_ENTRIES, buf, buf_len, &num);
         for (size_t i = 0; i < num; i++)
             print_entry("  ", entries + i);
     }
