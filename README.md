@@ -30,7 +30,7 @@ Main features:
 ┌──────┴──────┐┌─────┴─────┐┌────────┴────────┐┌─────┴─────┐┌─────┴─────┐...
   magic number   seqnum1        raw bytes 1      seqnum2     raw bytes 2
   format         timestamp1                      timestamp2
-  etc            checksum1                       checksum2
+  metadata       checksum1                       checksum2
                  length1                         length2
 ```
 
@@ -41,7 +41,7 @@ Main features:
 ┌──────┴──────┐┌─────┴─────┐┌─────┴─────┐...
   magic number   seqnum1      seqnum2
   format         timestamp1   timestamp2
-  etc            pos1         pos2
+                 pos1         pos2
 ```
 
 ## Usage
@@ -99,7 +99,6 @@ if (rc == LDB_OK)
 
 ldb_close(journal);
 ldb_free(journal);
-free(buf);
 ```
 
 Read the function documentation in `journal.h`.<br/>

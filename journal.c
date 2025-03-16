@@ -27,12 +27,10 @@
 #define LDB_EXT_IDX             ".idx"
 #define LDB_EXT_TMP             ".tmp"
 #define LDB_PATH_SEPARATOR      "/"
-#define LDB_NAME_MAX_LENGTH     32 
-#define LDB_TEXT_LEN            116
-#define LDB_TEXT_DAT            "\nThis is a ldb journal dat file.\nDon't edit it.\n"
-#define LDB_TEXT_IDX            "\nThis is a ldb journal idx file.\nDon't edit it.\n"
-#define LDB_MAGIC_NUMBER        0x211ABF1A62646C00
-#define LDB_FORMAT_1            1
+#define LDB_NAME_MAX_LENGTH     32
+#define LDB_DAT_MAGIC_NUMBER    0x74616478656C706E
+#define LDB_IDX_MAGIC_NUMBER    0x78646978656C706E
+#define LDB_FILE_FORMAT         2
 
 #if defined(__GNUC__) || defined(__clang__) || defined(__INTEL_LLVM_COMPILER) 
     #define LDB_INLINE  __attribute__((const)) __attribute__((always_inline)) inline
@@ -84,13 +82,13 @@ typedef struct ldb_impl_t
 typedef struct PACKED ldb_header_dat_t {
     uint64_t magic_number;
     uint32_t format;
-    char text[LDB_TEXT_LEN];
+    char metadata[LDB_METADATA_LEN];
 } ldb_header_dat_t;
 
 typedef struct PACKED ldb_header_idx_t {
     uint64_t magic_number;
     uint32_t format;
-    char text[LDB_TEXT_LEN];
+    uint32_t padding;
 } ldb_header_idx_t;
 
 typedef struct PACKED ldb_record_dat_t {
@@ -379,13 +377,10 @@ static bool ldb_create_file_dat(const char *path)
         return false;
 
     ldb_header_dat_t header = {
-        .magic_number = LDB_MAGIC_NUMBER,
-        .format = LDB_FORMAT_1,
-        .text = {0}
+        .magic_number = LDB_DAT_MAGIC_NUMBER,
+        .format = LDB_FILE_FORMAT,
+        .metadata = {0}
     };
-
-    memset(header.text, 0x0, sizeof(header.text));
-    strncpy(header.text, LDB_TEXT_DAT, sizeof(header.text));
 
     if (fwrite(&header, sizeof(ldb_header_dat_t), 1, fp) != 1)
         ret = false;
@@ -412,13 +407,10 @@ static bool ldb_create_file_idx(const char *path)
         return false;
 
     ldb_header_idx_t header = {
-        .magic_number = LDB_MAGIC_NUMBER,
-        .format = LDB_FORMAT_1,
-        .text = {0}
+        .magic_number = LDB_IDX_MAGIC_NUMBER,
+        .format = LDB_FILE_FORMAT,
+        .padding = 0
     };
-
-    memset(header.text, 0x0, sizeof(header.text));
-    strncpy(header.text, LDB_TEXT_IDX, sizeof(header.text));
 
     if (fwrite(&header, sizeof(ldb_header_idx_t), 1, fp) != 1)
         ret = false;
@@ -805,10 +797,10 @@ static int ldb_open_file_dat(ldb_impl_t *obj, bool check)
 
     pos += sizeof(ldb_header_dat_t);
 
-    if (header.magic_number != LDB_MAGIC_NUMBER) 
+    if (header.magic_number != LDB_DAT_MAGIC_NUMBER) 
         exit_function(LDB_ERR_FMT_DAT);
 
-    if (header.format != LDB_FORMAT_1)
+    if (header.format != LDB_FILE_FORMAT)
         exit_function(LDB_ERR_FMT_DAT);
 
     obj->format = header.format;
@@ -951,10 +943,10 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
 
     pos += sizeof(ldb_header_idx_t);
 
-    if (header.magic_number != LDB_MAGIC_NUMBER)
+    if (header.magic_number != LDB_IDX_MAGIC_NUMBER)
         exit_function(LDB_ERR_FMT_IDX);
 
-    if (header.format != LDB_FORMAT_1)
+    if (header.format != LDB_FILE_FORMAT)
         exit_function(LDB_ERR_FMT_IDX);
 
     if (header.format != obj->format)
@@ -1699,6 +1691,7 @@ long ldb_purge(ldb_impl_t *obj, uint64_t seqnum)
 
     int ret = LDB_ERR;
     long removed_entries = 0;
+    ldb_header_dat_t header_dat = {0};
     ldb_record_idx_t record_idx = {0};
     ldb_record_dat_t record_dat = {0};
     char *tmp_path = NULL;
@@ -1706,11 +1699,6 @@ long ldb_purge(ldb_impl_t *obj, uint64_t seqnum)
     int dat_fd = -1;
     int idx_fd = -1;
     size_t pos = 0;
-    ldb_header_dat_t header = {
-        .magic_number = LDB_MAGIC_NUMBER,
-        .format = LDB_FORMAT_1,
-        .text = {0}
-    };
 
     if (!ldb_is_valid_obj(obj))
         exit_function(LDB_ERR);
@@ -1748,12 +1736,16 @@ long ldb_purge(ldb_impl_t *obj, uint64_t seqnum)
             exit_function(ret);
 
         pthread_mutex_unlock(&obj->mutex_files);
+
         return removed_entries;
     }
 
     // case purge some entries
 
     removed_entries = (long) seqnum - (long) obj->state.seqnum1;
+
+    if ((ret = pread(dat_fd, &header_dat, sizeof(ldb_header_dat_t), 0)) != sizeof(ldb_header_dat_t))
+        exit_function(ret);
 
     if ((ret = ldb_read_record_idx(idx_fd, &obj->state, seqnum, &record_idx)) != LDB_OK)
         exit_function(ret);
@@ -1772,9 +1764,7 @@ long ldb_purge(ldb_impl_t *obj, uint64_t seqnum)
     if ((tmp_fp = fopen(tmp_path, "w")) == NULL)
         exit_function(LDB_ERR_TMP_FILE);
 
-    strncpy(header.text, LDB_TEXT_DAT, sizeof(header.text));
-
-    if (fwrite(&header, sizeof(ldb_header_dat_t), 1, tmp_fp) != 1)
+    if (fwrite(&header_dat, sizeof(ldb_header_dat_t), 1, tmp_fp) != 1)
         exit_function(LDB_ERR_TMP_FILE);
 
     if (!ldb_copy_file(obj->dat_fp, pos, obj->dat_end, tmp_fp, sizeof(ldb_header_dat_t)))
@@ -1808,6 +1798,7 @@ long ldb_purge(ldb_impl_t *obj, uint64_t seqnum)
         exit_function(ret);
 
     pthread_mutex_unlock(&obj->mutex_files);
+
     return removed_entries;
 
 LDB_PURGE_ERR:
@@ -1835,6 +1826,51 @@ int ldb_set_fsync(ldb_journal_t *obj, bool fsync) {
 
     ldb_impl_t *impl = (ldb_impl_t *)obj;
     impl->force_fsync = fsync;
+
+    return LDB_OK;
+}
+
+int ldb_set_meta(ldb_journal_t *obj, const char *meta, size_t len)
+{
+    static const char zero[LDB_METADATA_LEN] = {0};
+
+    if (!obj || !meta || len > LDB_METADATA_LEN)
+        return LDB_ERR_ARG;
+
+    if (!ldb_is_valid_obj(obj))
+        return LDB_ERR;
+
+    int dat_fd = fileno(obj->dat_fp);
+    off_t pos = offsetof(ldb_header_dat_t, metadata);
+
+    if (pwrite(dat_fd, meta, len, pos) != (ssize_t) len)
+        return LDB_ERR_WRITE_DAT;
+
+    if (len < LDB_METADATA_LEN)
+    {
+        pos += len;
+        len = LDB_METADATA_LEN - len;
+
+        if (pwrite(dat_fd, zero, len, pos) != (ssize_t) len)
+            return LDB_ERR_WRITE_DAT;
+    }
+
+    return LDB_OK;
+}
+
+int ldb_get_meta(ldb_journal_t *obj, char *meta, size_t len)
+{
+    if (!obj || !meta || len > LDB_METADATA_LEN)
+        return LDB_ERR_ARG;
+
+    if (!ldb_is_valid_obj(obj))
+        return LDB_ERR;
+
+    int dat_fd = fileno(obj->dat_fp);
+    off_t pos = offsetof(ldb_header_dat_t, metadata);
+
+    if (pread(dat_fd, meta, len, pos) != (ssize_t) len)
+        return LDB_ERR_READ_DAT;
 
     return LDB_OK;
 }

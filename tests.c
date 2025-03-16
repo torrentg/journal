@@ -75,6 +75,16 @@ void test_strerror(void)
     }
 }
 
+void test_sizeof(void)
+{
+    TEST_CHECK(sizeof(ldb_header_dat_t) % sizeof(uintptr_t) == 0);
+    TEST_CHECK(sizeof(ldb_record_dat_t) == 24);
+    TEST_CHECK(sizeof(ldb_header_idx_t) % sizeof(uintptr_t) == 0);
+    TEST_CHECK(sizeof(ldb_record_idx_t) == 24);
+    TEST_CHECK(sizeof(ldb_state_t) == 32);
+    TEST_CHECK(sizeof(ldb_entry_t) == 32);
+}
+
 // Results validated using https://crccalc.com/
 void test_crc32(void)
 {
@@ -256,9 +266,9 @@ void test_open_invl_dat_header(void)
     FILE *fp = NULL;
     ldb_journal_t journal = {0};
     ldb_header_dat_t header = {
-        .magic_number = LDB_MAGIC_NUMBER,
-        .format = LDB_FORMAT_1,
-        .text = {0}
+        .magic_number = LDB_DAT_MAGIC_NUMBER,
+        .format = LDB_FILE_FORMAT,
+        .metadata = {0}
     };
 
     remove("test.dat");
@@ -278,8 +288,8 @@ void test_open_invl_dat_header(void)
 
     // invalid file format
     fp = fopen("test.dat", "w");
-    header.magic_number = LDB_MAGIC_NUMBER;
-    header.format = LDB_FORMAT_1 + 1;
+    header.magic_number = LDB_DAT_MAGIC_NUMBER;
+    header.format = LDB_FILE_FORMAT + 1;
     fwrite(&header, sizeof(ldb_header_dat_t), 1, fp);
     fclose(fp);
     TEST_CHECK(ldb_open(&journal, "", "test", false) == LDB_ERR_FMT_DAT);
@@ -1291,7 +1301,52 @@ void test_flock(void)
     ldb_close(&journal1);
 }
 
+void test_meta_all(void)
+{
+    char buf[2 * LDB_METADATA_LEN] = {0};
+    char metadata[LDB_METADATA_LEN] = {0};
+    ldb_journal_t journal = {0};
+
+    remove("test.dat");
+    remove("test.idx");
+
+    TEST_CHECK(ldb_get_meta(NULL, buf, 10) == LDB_ERR_ARG);                         // NULL journal
+    TEST_CHECK(ldb_get_meta(&journal, NULL, 10) == LDB_ERR_ARG);                    // NULL buffer
+    TEST_CHECK(ldb_get_meta(&journal, buf, LDB_METADATA_LEN + 1) == LDB_ERR_ARG);   // length(buf) exceeds limit
+    TEST_CHECK(ldb_get_meta(&journal, buf, LDB_METADATA_LEN - 1) == LDB_ERR);       // uninitialized journal
+
+    TEST_CHECK(ldb_set_meta(NULL, buf, 10) == LDB_ERR_ARG);                         // NULL journal
+    TEST_CHECK(ldb_set_meta(&journal, NULL, 10) == LDB_ERR_ARG);                    // NULL buffer
+    TEST_CHECK(ldb_set_meta(&journal, buf, LDB_METADATA_LEN + 1) == LDB_ERR_ARG);   // length(buf) exceeds limit
+    TEST_CHECK(ldb_set_meta(&journal, buf, LDB_METADATA_LEN - 1) == LDB_ERR);       // uninitialized journal
+
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+
+    // metadata default value is 0
+    TEST_CHECK(ldb_get_meta(&journal, metadata, LDB_METADATA_LEN) == LDB_OK);
+    TEST_CHECK(memcmp(metadata, buf, LDB_METADATA_LEN) == 0);
+
+    sprintf(buf, "hello world");
+    TEST_CHECK(ldb_set_meta(&journal, buf, strlen(buf) + 1) == LDB_OK);
+    TEST_CHECK(ldb_get_meta(&journal, metadata, strlen(buf) + 1) == LDB_OK);
+    TEST_CHECK(memcmp(metadata, buf, strlen(buf) + 1) == 0);
+
+    memset(buf, 0x0, sizeof(buf));
+    sprintf(buf, "hello");
+    TEST_CHECK(ldb_set_meta(&journal, buf, strlen(buf) + 1) == LDB_OK);
+    TEST_CHECK(ldb_get_meta(&journal, metadata, LDB_METADATA_LEN) == LDB_OK);
+    TEST_CHECK(memcmp(metadata, buf, strlen(buf) + 1) == 0);
+
+    memset(buf, 0x0, sizeof(buf));
+    TEST_CHECK(ldb_set_meta(&journal, buf, 0) == LDB_OK);
+    TEST_CHECK(ldb_get_meta(&journal, metadata, LDB_METADATA_LEN) == LDB_OK);
+    TEST_CHECK(memcmp(metadata, buf, LDB_METADATA_LEN) == 0);
+
+    ldb_close(&journal);
+}
+
 TEST_LIST = {
+    { "sizeof()",                     test_sizeof },
     { "crc32()",                      test_crc32 },
     { "version()",                    test_version },
     { "strerror()",                   test_strerror },
@@ -1339,6 +1394,7 @@ TEST_LIST = {
     { "purge() all",                  test_purge_all },
     { "alloc() all",                  test_alloc_all },
     { "fsync() all",                  test_fsync_all },
+    { "meta() all",                   test_meta_all },
     { "flock()",                      test_flock },
     { NULL, NULL }
 };

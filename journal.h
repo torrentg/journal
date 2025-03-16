@@ -144,6 +144,8 @@ SOFTWARE.
 #define LDB_ERR_CHECKSUM         -19
 #define LDB_ERR_LOCK             -20
 
+#define LDB_METADATA_LEN        (4 + 64)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -236,6 +238,8 @@ int ldb_close(ldb_journal_t *obj);
 /**
  * Enables or disables the fsync mode for the journal.
  * 
+ * By default fsync is disabled.
+ * 
  * When fsync mode is enabled, all data written to the journal files is flushed to disk,
  * ensuring that changes are persisted in case of a system crash or power failure.
  * When fsync mode is disabled, data may not be immediately flushed to disk, which can
@@ -247,6 +251,22 @@ int ldb_close(ldb_journal_t *obj);
  * @return Error code (0 = OK).
  */
 int ldb_set_fsync(ldb_journal_t *obj, bool fsync);
+
+/**
+ * Access to journal metadata.
+ * 
+ * Metadata is a tiny user-defined content used to store additional information about the
+ * journal content (ex. format of the saved entries). The metadata is stored in the journal 
+ * file header and can be retrieved later using ldb_get_meta().
+ * 
+ * @param[in] obj Journal to modify.
+ * @param[in,out] meta Metadata content (cannot exceed LDB_METADATA_LEN bytes).
+ * @param[in] len Length of the metadata string.
+ * 
+ * @return Error code (0 = OK).
+ */
+int ldb_set_meta(ldb_journal_t *obj, const char *meta, size_t len);
+int ldb_get_meta(ldb_journal_t *obj, char *meta, size_t len);
 
 /**
  * Appends entries to the journal.
