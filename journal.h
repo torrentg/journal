@@ -189,28 +189,6 @@ const char * ldb_version(void);
 const char * ldb_strerror(int errnum);
 
 /**
- * Deallocates the memory pointed to by the entry.
- * It does not deallocate the entry itself.
- * 
- * Use this function to deallocate entries returned by ldb_read().
- * Updates entry pointers to NULL and lengths to 0.
- * 
- * @param[in,out] entry Entry to dealloc data (if NULL does nothing).
- */
-void ldb_free_entry(ldb_entry_t *entry);
-
-/**
- * Deallocates the memory of an array of entries.
- * 
- * This is a utility function that calls ldb_free_entry() for
- * each array item.
- * 
- * @param[in] entries Array of entries (if NULL does nothing).
- * @param[in] len Number of entries.
- */
-void ldb_free_entries(ldb_entry_t *entries, size_t len);
-
-/**
  * Allocates a new ldb_journal_t (opaque) object.
  * 
  * @return Allocated object or NULL if no memory.
@@ -318,31 +296,7 @@ int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num
 /**
  * Reads num entries starting from seqnum (included).
  * 
- * @param[in] obj Journal to use.
- * @param[in] seqnum Initial sequence number.
- * @param[out] entries Array of entries (min length = len).
- *                  These entries are uninitialized (with NULL pointers) or entries 
- *                  previously initialized by the ldb_read() function. In this case, the 
- *                  allocated memory is reused and will be reallocated if not enough.
- *                  Use ldb_free_entry() to deallocate returned entries.
- * @param[in] len Number of entries to read.
- * @param[out] num Number of entries read (can be NULL). If num is less than 'len' means 
- *                  that the last record was reached. Unused entries are signaled with 
- *                  seqnum = 0.
- * 
- * @return Error code (0 = OK).
- */
-int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len, size_t *num);
-
-/**
- * Direct read of num entries from seqnum (included).
- * 
- * Performance improvements respect ldb_read():
- *   - 1 unique read() operation
- *   - No memory allocation
- * 
  * This function receives a buffer memory where disk entries are copied as-is.
- * No need to free the entries array after the call, suffices to deallocate the buffer.
  * 
  * On success:
  *   - Returns LDB_OK
@@ -505,11 +459,9 @@ class journal_t
         return ldb_append(m_journal, entries, len, num);
     }
 
-    int read(uint64_t seqnum, ldb_entry_t *entries, size_t len, size_t *num) { 
-        return ldb_read(m_journal, seqnum, entries, len, num);
+    int read(uint64_t seqnum, ldb_entry_t *entries, size_t len, char *buf, size_t buf_len, size_t *num) { 
+        return ldb_direct_read(m_journal, seqnum, entries, len, buf, buf_len, num);
     }
-
-    //TODO: add read_direct() method
 
     int stats(uint64_t seqnum1, uint64_t seqnum2, ldb_stats_t *stats) {
         return ldb_stats(m_journal, seqnum1, seqnum2, stats);

@@ -104,7 +104,7 @@ int run(ldb_journal_t *journal)
     rc = ldb_direct_read(journal, 1001, &entry, 1, buf, buf_len, NULL);
     print_result("read existing entry (sn=1001)", rc);
 
-    rc = ldb_read(journal, 9999, &entry, 1, NULL);
+    rc = ldb_direct_read(journal, 9999, &entry, 1, buf, buf_len, NULL);
     print_result("read non-existing entry (sn=9999)", rc);
 
     // we need to allocate/reallocate the buffer to store the data

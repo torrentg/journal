@@ -681,61 +681,6 @@ void test_open_idx_check_fails_2(void)
     ldb_close(&journal);
 }
 
-void test_alloc_free_entry(void)
-{
-    char *ptr = NULL;
-    ldb_entry_t entry = {0};
-
-    TEST_ASSERT(!ldb_alloc_entry(NULL, 0));
-    ldb_free_entry(NULL);
-
-    TEST_ASSERT(ldb_alloc_entry(&entry, 0));
-    TEST_ASSERT(entry.data == NULL);
-    TEST_ASSERT(entry.data_len == 0);
-    ldb_free_entry(&entry);
-
-    TEST_ASSERT(ldb_alloc_entry(&entry, 11));
-    TEST_ASSERT(entry.data_len == 11);
-    TEST_ASSERT((size_t)(entry.data) % sizeof(void*) == 0);
-    ldb_free_entry(&entry);
-
-    // case: mem reused
-    TEST_ASSERT(ldb_alloc_entry(&entry, 11));
-    ptr = entry.data;
-    TEST_ASSERT(ldb_alloc_entry(&entry, 5));
-    TEST_ASSERT(entry.data_len == 5);
-    TEST_ASSERT(entry.data == ptr);
-    ldb_free_entry(&entry);
-
-    // we reserve a chunk of memory to 'force' an allocation just after 
-    // the previous one avoiding a realloc was done in the same place
-    char *aux = (char *) calloc(1000,1);
-
-    TEST_ASSERT(ldb_alloc_entry(&entry, 5000));
-    TEST_ASSERT(entry.data_len == 5000);
-    TEST_ASSERT(entry.data != ptr); // this test can fail if mem is reallocated in the same place
-    ldb_free_entry(&entry);
-
-    free(aux);
-}
-
-void test_alloc_free_entries(void)
-{
-    ldb_entry_t entries[3] = {{0}};
-
-    // abnormal cases are considered (do nothing)
-    ldb_free_entries(NULL, 3);
-    ldb_free_entries(entries, 0);
-
-    for (int i = 0; i < 3; i++)
-        entries[i].data = (char *) malloc(10);
-
-    ldb_free_entries(entries, 3);
-
-    for (int i = 0; i < 3; i++)
-        TEST_ASSERT(entries[i].data == NULL);
-}
-
 void test_append_invalid_args(void)
 {
     ldb_journal_t journal = {0};
@@ -922,83 +867,6 @@ bool check_entry(ldb_entry_t *entry, uint64_t seqnum, const char *data)
             (entry->data == data || (entry->data != NULL && data != NULL && strcmp(entry->data, data) == 0)));
 }
 
-void test_read_invalid_args(void)
-{
-    ldb_journal_t journal = {0};
-    ldb_entry_t entries[3] = {{0}};
-
-    TEST_ASSERT(ldb_read(NULL, 1, entries, 3, NULL) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_read(&journal, 1, NULL, 3, NULL) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_read(&journal, 1, entries, 0, NULL) == LDB_ERR_ARG);
-    TEST_ASSERT(ldb_read(&journal, 1, entries, 3, NULL) == LDB_ERR);
-}
-
-void test_read_empty(void)
-{
-    ldb_journal_t journal = {0};
-    ldb_entry_t entries[3] = {{0}};
-    size_t num = 10;
-
-    remove("test.dat");
-    remove("test.idx");
-
-    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
-    entries[0].seqnum = 5;
-    entries[1].seqnum = 15;
-    entries[2].seqnum = 25;
-
-    TEST_ASSERT(ldb_read(&journal, 0, entries, 3, &num) == LDB_ERR_NOT_FOUND);
-    TEST_ASSERT(num == 0);
-
-    TEST_ASSERT(ldb_read(&journal, 2, entries, 3, &num) == LDB_ERR_NOT_FOUND);
-    TEST_ASSERT(num == 0);
-
-    ldb_close(&journal);
-}
-
-void test_read_nominal_case(void)
-{
-    ldb_journal_t journal = {0};
-    ldb_entry_t entries[10] = {{0}};
-    size_t num = 0;
-
-    remove("test.dat");
-    remove("test.idx");
-
-    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
-    append_entries(&journal, 20, 314);
-
-    TEST_ASSERT(ldb_read(&journal, 0, entries, 3, &num) == LDB_ERR_NOT_FOUND);
-    TEST_ASSERT(num == 0);
-
-    TEST_ASSERT(ldb_read(&journal, 10, entries, 3, &num) == LDB_ERR_NOT_FOUND);
-    TEST_ASSERT(num == 0);
-
-    TEST_ASSERT(ldb_read(&journal, 20, entries, 3, &num) == LDB_OK);
-    TEST_ASSERT(num == 3);
-    TEST_ASSERT(check_entry(&entries[0], 20, "data-20"));
-    TEST_ASSERT(check_entry(&entries[1], 21, "data-21"));
-    TEST_ASSERT(check_entry(&entries[2], 22, "data-22"));
-
-    TEST_ASSERT(ldb_read(&journal, 40, entries, 2, &num) == LDB_OK);
-    TEST_ASSERT(num == 2);
-    TEST_ASSERT(check_entry(&entries[0], 40, "data-40"));
-    TEST_ASSERT(check_entry(&entries[1], 41, "data-41"));
-
-    TEST_ASSERT(ldb_read(&journal, 313, entries, 3, &num) == LDB_OK);
-    TEST_ASSERT(num == 2);
-    TEST_ASSERT(check_entry(&entries[0], 313, "data-313"));
-    TEST_ASSERT(check_entry(&entries[1], 314, "data-314"));
-
-    TEST_ASSERT(ldb_read(&journal, 400, entries, 3, &num) == LDB_ERR_NOT_FOUND);
-    TEST_ASSERT(num == 0);
-
-    ldb_free_entries(entries, 3);
-    ldb_close(&journal);
-}
-
-//---
-
 void test_direct_read_invalid_args(void)
 {
     ldb_journal_t journal = {0};
@@ -1112,8 +980,6 @@ void test_direct_read_nominal_case(void)
 
     ldb_close(&journal);
 }
-
-//---
 
 void test_stats_invalid_args(void)
 {
@@ -1340,6 +1206,7 @@ void test_purge_nothing(void)
 
 void test_purge_nominal_case(void)
 {
+    char buf[1024] = {0};
     ldb_journal_t journal = {0};
     ldb_entry_t entry = {0};
     size_t dat_end = 0;
@@ -1357,7 +1224,7 @@ void test_purge_nominal_case(void)
     TEST_ASSERT(journal.state.seqnum1 == 100);
     TEST_ASSERT(journal.state.seqnum2 == 314);
     TEST_ASSERT(journal.dat_end < dat_end);
-    TEST_ASSERT(ldb_read(&journal, 101, &entry, 1, NULL) == LDB_OK);
+    TEST_ASSERT(ldb_direct_read(&journal, 101, &entry, 1, buf, sizeof(buf), NULL) == LDB_OK);
     TEST_ASSERT(entry.seqnum == 101);
     ldb_close(&journal);
 
@@ -1365,8 +1232,6 @@ void test_purge_nominal_case(void)
     TEST_ASSERT(journal.state.seqnum1 == 100);
     TEST_ASSERT(journal.state.seqnum2 == 314);
     ldb_close(&journal);
-
-    ldb_free_entry(&entry);
 }
 
 void test_purge_all(void)
@@ -1429,8 +1294,6 @@ TEST_LIST = {
     { "is_valid_path()",              test_is_valid_path },
     { "is_valid_name()",              test_is_valid_name },
     { "create_filename()",            test_create_filename },
-    { "alloc()/free() entry",         test_alloc_free_entry },
-    { "free_entries()",               test_alloc_free_entries },
     { "close()",                      test_close },
     { "open() with invalid args",     test_open_invalid_args },
     { "open() with invalid path",     test_open_invalid_path },
@@ -1455,14 +1318,9 @@ TEST_LIST = {
     { "append() nominal case",        test_append_nominal_case },
     { "append() broken sequence",     test_append_broken_sequence },
     { "append() lack of data",        test_append_lack_of_data },
-    { "read() invalid args",          test_read_invalid_args },
-    { "read() empty journal",         test_read_empty },
-    { "read() nominal case",          test_read_nominal_case },
-
     { "direct_read() invalid args",   test_direct_read_invalid_args },
     { "direct_read() empty journal",  test_direct_read_empty },
     { "direct_read() nominal case",   test_direct_read_nominal_case },
-
     { "stats() invalid args",         test_stats_invalid_args },
     { "stats() nominal case",         test_stats_nominal_case },
     { "search() invalid args",        test_search_invalid_args },
