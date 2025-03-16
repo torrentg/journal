@@ -34,8 +34,6 @@
 #define LDB_MAGIC_NUMBER        0x211ABF1A62646C00
 #define LDB_FORMAT_1            1
 
-#define MIN(a,b) (((a)<(b))?(a):(b))
-
 #if defined(__GNUC__) || defined(__clang__) || defined(__INTEL_LLVM_COMPILER) 
     #define LDB_INLINE  __attribute__((const)) __attribute__((always_inline)) inline
     #define PACKED      __attribute__((__packed__))
@@ -229,6 +227,12 @@ static uint64_t ldb_clamp(uint64_t val, uint64_t lo, uint64_t hi) {
     return (val < lo ? lo : (hi < val ? hi : val));
 }
 
+LDB_INLINE 
+static size_t ldb_padding(size_t value) {
+    size_t round_up = (value + (sizeof(uintptr_t) - 1)) & ~(sizeof(uintptr_t) - 1);
+    return round_up - value;
+}
+
 LDB_INLINE
 static bool ldb_is_valid_obj(ldb_impl_t *obj) {
     return (obj &&
@@ -306,13 +310,6 @@ int ldb_close(ldb_impl_t *obj)
 }
 
 #undef LDB_FREE
-
-// returns size adjusted to a multiple of sizeof(intptr_t)
-LDB_INLINE 
-static size_t ldb_allocated_size(size_t size) {
-    size_t rem = size % sizeof(intptr_t);
-    return size + (rem == 0 ? 0 : sizeof(intptr_t) - rem);
-}
 
 static bool ldb_is_valid_path(const char *path)
 {
@@ -482,6 +479,9 @@ static bool ldb_zeroize(FILE *fp, size_t pos)
 
     fflush(fp);
 
+    if (fseek(fp, (long) pos, SEEK_SET) != 0)
+        return false;
+
     ret = true;
 
 LDB_ZEROIZE_END:
@@ -596,6 +596,8 @@ static int ldb_append_entry_dat(ldb_impl_t *obj, ldb_state_t *state, ldb_entry_t
     assert(!feof(obj->dat_fp));
     assert(!ferror(obj->dat_fp));
 
+    static const char zeros[sizeof(uintptr_t)] = {0};
+
     if (entry->data_len != 0 && entry->data == NULL)
         return LDB_ERR_ENTRY_DATA;
 
@@ -619,8 +621,15 @@ static int ldb_append_entry_dat(ldb_impl_t *obj, ldb_state_t *state, ldb_entry_t
         return LDB_ERR_WRITE_DAT;
 
     if (record.data_len)
+    {
         if (fwrite(entry->data, 1, record.data_len, obj->dat_fp) != record.data_len)
             return LDB_ERR_WRITE_DAT;
+
+        size_t padding = ldb_padding(entry->data_len);
+
+        if (fwrite(zeros, 1, padding, obj->dat_fp) != padding)
+            return LDB_ERR_WRITE_DAT;
+    }
 
     if (state->seqnum1 == 0) {
         state->seqnum1 = entry->seqnum;
@@ -822,7 +831,7 @@ static int ldb_open_file_dat(ldb_impl_t *obj, bool check)
     if (record.seqnum == 0)
         goto LDB_OPEN_FILE_DAT_ZEROIZE;
 
-    pos += sizeof(ldb_record_dat_t) + record.data_len;
+    pos += sizeof(ldb_record_dat_t) + record.data_len + ldb_padding(record.data_len);
 
     obj->state.seqnum1 = record.seqnum;
     obj->state.timestamp1 = record.timestamp;
@@ -853,7 +862,7 @@ static int ldb_open_file_dat(ldb_impl_t *obj, bool check)
         if (record.timestamp < obj->state.timestamp2)
             exit_function(LDB_ERR_FMT_DAT);
 
-        pos += sizeof(ldb_record_dat_t) + record.data_len;
+        pos += sizeof(ldb_record_dat_t) + record.data_len + ldb_padding(record.data_len);
 
         obj->state.seqnum2 = record.seqnum;
         obj->state.timestamp2 = record.timestamp;
@@ -1081,7 +1090,7 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
     if (record_dat.seqnum != record_n.seqnum || record_dat.timestamp != record_n.timestamp)
         exit_function(LDB_ERR_FMT_IDX);
 
-    pos += sizeof(ldb_record_dat_t) + record_dat.data_len;
+    pos += sizeof(ldb_record_dat_t) + record_dat.data_len + ldb_padding(record_dat.data_len);
 
     obj->dat_end = pos;
 
@@ -1106,7 +1115,7 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
         record_n.timestamp = record_dat.timestamp;
         record_n.pos = pos;
 
-        size_t rec_len = sizeof(ldb_record_dat_t) + record_dat.data_len;
+        size_t rec_len = sizeof(ldb_record_dat_t) + record_dat.data_len + ldb_padding(record_dat.data_len);
         if (pos + rec_len > len)
             break; // zeroize
 
@@ -1329,6 +1338,7 @@ int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t l
     ldb_state_t state = {0};
     ldb_record_idx_t record_idx = {0};
     const ldb_record_dat_t *record_dat_ptr = NULL;
+    size_t padding = 0;
     ssize_t bytes = 0;
     uint64_t seq = 0;
     size_t idx = 0;
@@ -1357,7 +1367,7 @@ int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t l
             exit_function(ret);
 
         assert(record_idx.pos > read_pos);
-        read_bytes = MIN(record_idx.pos - read_pos, buf_len);
+        read_bytes = ldb_min(record_idx.pos - read_pos, buf_len);
     }
     else
     {
@@ -1396,6 +1406,8 @@ int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t l
         entries[idx].data_len = record_dat_ptr->data_len;
         entries[idx].data = buf + sizeof(ldb_record_dat_t);
 
+        assert(((uintptr_t) entries[idx].data) % sizeof(uintptr_t) == 0);
+
         buf += sizeof(ldb_record_dat_t);
         bytes -= sizeof(ldb_record_dat_t);
 
@@ -1407,6 +1419,11 @@ int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t l
         buf += record_dat_ptr->data_len;
         bytes -= record_dat_ptr->data_len;
 
+        padding = ldb_min(ldb_padding(record_dat_ptr->data_len), (size_t) bytes);
+
+        buf += padding;
+        bytes -= padding;
+
         seq = record_dat_ptr->seqnum;
         idx++;
     }
@@ -1414,7 +1431,7 @@ int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t l
     if (num != NULL)
         *num = idx;
 
-    // TODO: validate checksum
+    // TODO: validate checksum?
 
     ret = LDB_OK;
 
@@ -1480,7 +1497,7 @@ int ldb_stats(ldb_impl_t *obj, uint64_t seqnum1, uint64_t seqnum2, ldb_stats_t *
     stats->max_timestamp = record2.timestamp;
     stats->num_entries = seqnum2 - seqnum1 + 1;
     stats->index_size = sizeof(ldb_record_idx_t) * stats->num_entries;
-    stats->data_size = record2.pos - record1.pos + sizeof(ldb_record_dat_t) + record_dat.data_len;
+    stats->data_size = record2.pos - record1.pos + sizeof(ldb_record_dat_t) + record_dat.data_len + ldb_padding(record_dat.data_len);
 
     ret = LDB_OK;
 

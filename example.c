@@ -181,7 +181,7 @@ int run(ldb_journal_t *journal)
                 buf = aux;
             }
         }
-    
+
         ldb_read(journal, sn, entries, MAX_ENTRIES, buf, buf_len, &num);
         for (size_t i = 0; i < num; i++)
             print_entry("  ", entries + i);

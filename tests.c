@@ -18,7 +18,7 @@ void append_entries(ldb_journal_t *journal, uint64_t seqnum1, uint64_t seqnum2)
 
         ldb_entry_t entry = {
             .seqnum = seqnum1,
-            .timestamp = seqnum1 - (seqnum1 % 10),
+            .timestamp = (seqnum1 < 10 ? 1 : 0) + seqnum1 - (seqnum1 % 10),
             .data_len = (uint32_t) strlen(data) + 1,
             .data = data
         };
@@ -428,7 +428,7 @@ void test_open_1_entry_ok(void)
     TEST_ASSERT(journal.state.timestamp1 == 3);
     TEST_ASSERT(journal.state.seqnum2 == 10);
     TEST_ASSERT(journal.state.timestamp2 == 3);
-    TEST_ASSERT(journal.dat_end == sizeof(ldb_header_dat_t) + sizeof(ldb_record_dat_t) + entry.data_len);
+    TEST_ASSERT(journal.dat_end == sizeof(ldb_header_dat_t) + sizeof(ldb_record_dat_t) + entry.data_len + ldb_padding(entry.data_len));
     ldb_close(&journal);
 
     // open journal with 1-entry (idx no rebuilded)
@@ -494,6 +494,7 @@ void _test_open_rollbacked_ok(bool check)
 
         fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
         fwrite(data, record_dat.data_len, 1, journal.dat_fp);
+        fwrite(data, ldb_padding(record_dat.data_len), 1, journal.dat_fp);
 
         fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, journal.idx_fp);
     }
@@ -542,6 +543,7 @@ void test_open_dat_check_fails(void)
     record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum);
     fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
     fwrite(data, record_dat.data_len, 1, journal.dat_fp);
+    fwrite(data, ldb_padding(record_dat.data_len), 1, journal.dat_fp);
 
     // inserting entry-2 (broken sequence)
     record_dat.seqnum = 16;
@@ -551,6 +553,7 @@ void test_open_dat_check_fails(void)
     record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum);
     fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
     fwrite(data, record_dat.data_len, 1, journal.dat_fp);
+    fwrite(data, ldb_padding(record_dat.data_len), 1, journal.dat_fp);
 
     ldb_close(&journal);
 
@@ -579,6 +582,7 @@ void test_open_dat_corrupted(void)
     record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum);
     fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
     fwrite(data, record_dat.data_len, 1, journal.dat_fp);
+    fwrite(data, ldb_padding(record_dat.data_len), 1, journal.dat_fp);
 
     // inserting entry-2 (incorrect checksum)
     record_dat.seqnum = 11;
@@ -588,6 +592,7 @@ void test_open_dat_corrupted(void)
     record_dat.checksum = ldb_crc32(data, record_dat.data_len, checksum) + 999;
     fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
     fwrite(data, record_dat.data_len, 1, journal.dat_fp);
+    fwrite(data, ldb_padding(record_dat.data_len), 1, journal.dat_fp);
 
     ldb_close(&journal);
 
@@ -624,6 +629,7 @@ void test_open_idx_check_fails_1(void)
 
         fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
         fwrite(data, record_dat.data_len, 1, journal.dat_fp);
+        fwrite(data, ldb_padding(record_dat.data_len), 1, journal.dat_fp);
 
         fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, journal.idx_fp);
     }
@@ -667,6 +673,7 @@ void test_open_idx_check_fails_2(void)
 
         fwrite(&record_dat, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
         fwrite(data, record_dat.data_len, 1, journal.dat_fp);
+        fwrite(data, ldb_padding(record_dat.data_len), 1, journal.dat_fp);
 
         fwrite(&record_idx, sizeof(ldb_record_idx_t), 1, journal.idx_fp);
     }
@@ -920,12 +927,12 @@ void test_read_nominal_case(void)
     remove("test.idx");
 
     TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
-    append_entries(&journal, 20, 314);
+    append_entries(&journal, 5, 314);
 
     TEST_ASSERT(ldb_read(&journal, 0, entries, 3, buf, sizeof(buf), &num) == LDB_ERR_NOT_FOUND);
     TEST_ASSERT(num == 0);
 
-    TEST_ASSERT(ldb_read(&journal, 10, entries, 3, buf, sizeof(buf), &num) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(ldb_read(&journal, 3, entries, 3, buf, sizeof(buf), &num) == LDB_ERR_NOT_FOUND);
     TEST_ASSERT(num == 0);
 
     TEST_ASSERT(ldb_read(&journal, 20, entries, 3, buf, sizeof(buf), &num) == LDB_OK);

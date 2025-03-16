@@ -296,15 +296,13 @@ int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num
 /**
  * Reads num entries starting from seqnum (included).
  * 
- * Performance note:
- *   Using a sufficiently large buffer is crucial for optimal performance as it:
- *   - Minimizes the number of read() system calls (expensive operations)
- *   - Takes advantage of sequential I/O patterns
- *   - Reduces context switches between user and kernel space
- * 
  * This function uses the pre-allocated buffer to bulk the disk data as-is,
  * significantly reducing the number of system calls and improving performance.
- * Returned data entries (entries[x].data) are aligned to sizeof(uintptr_t).
+ * When the buffer size does not suffices you will need to handle the case
+ * (see below).
+ * 
+ * Returned data entries (entries[x].data) are aligned to sizeof(uintptr_t)
+ * as long as buffer is aligned to sizeof(uintptr_t).
  * 
  * On success:
  *   - Returns LDB_OK
@@ -315,8 +313,9 @@ int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num
  *     - if entries[num].rev == 0 => last record reached
  *     - if entries[num].rev != 0 => not enough memory in buffer
  *          entries[num] is filled correctly but data pointer is NULL
- *          use this info to reallocate buffer if required and to call ldb_read() again
- *          add at least entries[num].data_len + 24 to the buffer length
+ *          If the current buffer size is great than buffer[num].data_size you can
+ *          call ldb_read(obj, entries[num].seqnum, entries, len - num, ...) again.
+ *          Otherwise you need to reallocate the buffer with at least entries[num].data_len + 24 bytes.
  *   - unused entries are signaled with seqnum = 0
  * 
  * @param[in] obj Journal to use.
@@ -327,7 +326,7 @@ int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num
  * @param[in] buf_len Length of the buffer memory (value great than 24).
  * @param[out] num Number of entries read (can be NULL).
  *                 If num is less than 'len' means that the last record was 
- *                 reached or that buffer length exhausted. Unused entries 
+ *                 reached or that buffer was exhausted. Unused entries 
  *                 are signaled with seqnum = 0.
  * 
  * @return Error code (0 = OK).
