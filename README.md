@@ -51,24 +51,55 @@ Drop [`journal.h`](journal.h) and [`journal.c`](journal.c) into your project and
 ```c
 #include "journal.h"
 
+#define MAX_ENTRIES 100
+
 ldb_journal_t *journal = NULL;
-ldb_entry_t wentries[MAX_ENTRIES] = {{0}};
-ldb_entry_t rentries[MAX_ENTRIES] = {{0}};
+ldb_entry_t entries[MAX_ENTRIES] = {{0}};
+ldb_stats_t stats = {0};
+char buf[10 * 1024];
+size_t num = 0;
+int rc = 0;
 
 journal = ldb_alloc();
 ldb_open(journal, "/my/directory", "example", true);
 
-// on write-thread
-fill_entries(wentries, MAX_ENTRIES);
-ldb_append(journal, wentries, MAX_ENTRIES, NULL);
+...
 
-// on read-thread
-ldb_read(journal, 1, rentries, MAX_ENTRIES, NULL);
-process_entries(rentries, MAX_ENTRIES);
+rc = ldb_append(journal, entries, MAX_ENTRIES, NULL);
 
-ldb_free_entries(rentries, MAX_ENTRIES);
+if (rc != LDB_OK)
+    printf("Error: %s\n", ldb_strerror(rc));
+
+...
+
+ldb_stats(journal, 0, UINT64_MAX, &stats);
+
+print("Number of entries = %zu\n", stats.data_size);
+print("Min seqnum = %zu\n", stats.min_seqnum);
+print("Max seqnum = %zu\n", stats.max_seqnum);
+print("Data bytes = %zu\n", stats.data_size);
+
+rc = ldb_read(journal, stats.min_seqnum, entries, MAX_ENTRIES, buf, sizeof(buf), &num);
+
+if (rc == LDB_OK)
+{
+    if (num == MAX_ENTRIES)
+        printf("Read all requested data\n");
+    else if (entries[num].seqnum == 0)
+        printf("Last record reached\n");
+    else {
+        printf("Not enough memory in buffer, only read %zu entries\n", num);
+        printf("Next entry requires a minimum of %zu bytes\n", entries[num].data_len + 24);
+    }
+
+    for (int i = 0; i < num; i++) {
+        printf("entry[%zu].data = %s\n", entry[i].seqnum, entry[i].data);
+    }
+}
+
 ldb_close(journal);
 ldb_free(journal);
+free(buf);
 ```
 
 Read the function documentation in `journal.h`.<br/>

@@ -156,13 +156,6 @@ typedef enum ldb_search_e {
     LDB_SEARCH_UPPER              // Search for the first entry with a timestamp greater than the value.
 } ldb_search_e;
 
-typedef struct ldb_state_t {
-    uint64_t seqnum1;             // First sequence number (0 means no entries).
-    uint64_t timestamp1;          // Timestamp of the first entry.
-    uint64_t seqnum2;             // Last sequence number (0 means no entries).
-    uint64_t timestamp2;          // Timestamp of the last entry.
-} ldb_state_t;
-
 typedef struct ldb_entry_t {
     uint64_t seqnum;              // Sequence number (0 = system assigned).
     uint64_t timestamp;           // Timestamp (0 = system assigned).
@@ -190,6 +183,7 @@ const char * ldb_version(void);
  * Returns the textual description of the ldb error code.
  * 
  * @param[in] errnum Code error.
+ * 
  * @return Textual description.
  */
 const char * ldb_strerror(int errnum);
@@ -226,7 +220,7 @@ ldb_journal_t * ldb_alloc(void);
 /**
  * Deallocates a ldb_journal_t object.
  * 
- * @param obj Object to deallocate.
+ * @param[in] obj Object to deallocate.
  */
 void ldb_free(ldb_journal_t *obj);
 
@@ -244,6 +238,7 @@ void ldb_free(ldb_journal_t *obj);
  * @param[in] path Directory where journal files are located.
  * @param[in] name Journal name (allowed characters: [a-ZA-Z0-9_], max length = 32).
  * @param[in] check Check journal files (true|false).
+ * 
  * @return Error code (0 = OK). On error, the journal is closed properly (ldb_close not required).
  *         You can check the errno value to get additional error details.
  */
@@ -255,6 +250,7 @@ int ldb_open(ldb_journal_t *obj, const char *path, const char *name, bool check)
  * Closes open files and releases allocated memory.
  * 
  * @param[in,out] obj Journal to close.
+ * 
  * @return Return code (0 = OK).
  */
 int ldb_close(ldb_journal_t *obj);
@@ -269,6 +265,7 @@ int ldb_close(ldb_journal_t *obj);
  * 
  * @param[in] obj Journal to configure.
  * @param[in] fsync Mode to set (true=enable, false=disable).
+ * 
  * @return Error code (0 = OK).
  */
 int ldb_set_fsync(ldb_journal_t *obj, bool fsync);
@@ -313,6 +310,7 @@ int ldb_set_fsync(ldb_journal_t *obj, bool fsync);
  *                  User must reset pointers before reuse.
  * @param[in] len Number of entries to append.
  * @param[out] num Number of entries appended (can be NULL).
+ * 
  * @return Error code (0 = OK).
  */
 int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num);
@@ -331,9 +329,48 @@ int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num
  * @param[out] num Number of entries read (can be NULL). If num is less than 'len' means 
  *                  that the last record was reached. Unused entries are signaled with 
  *                  seqnum = 0.
+ * 
  * @return Error code (0 = OK).
  */
 int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len, size_t *num);
+
+/**
+ * Direct read of num entries from seqnum (included).
+ * 
+ * Performance improvements respect ldb_read():
+ *   - 1 unique read() operation
+ *   - No memory allocation
+ * 
+ * This function receives a buffer memory where disk entries are copied as-is.
+ * No need to free the entries array after the call, suffices to deallocate the buffer.
+ * 
+ * On success:
+ *   - Returns LDB_OK
+ *   - num param contains the number of entries read
+ *   - entries param contains the read entries
+ *   - if num = len, all requested data was read
+ *   - otherwise (num < len)
+ *     - if entries[num].rev == 0 => last record reached
+ *     - if entries[num].rev != 0 => not enough memory in buffer
+ *          entries[num] is filled correctly but data pointer is NULL
+ *          use this info to reallocate buffer if required and to call ldb_direct_read() again
+ *          add a minimum of 24 bytes to the buffer length to avoid this situation
+ *   - unused entries are signaled with seqnum = 0
+ * 
+ * @param[in] obj Journal to use.
+ * @param[in] seqnum Initial sequence number.
+ * @param[out] entries Array of uninitialized entries (min length = len).
+ * @param[in] len Number of entries to read.
+ * @param[out] buf Allocated buffer memory where data entries are copied.
+ * @param[in] buf_len Length of the buffer memory (value great than 24).
+ * @param[out] num Number of entries read (can be NULL).
+ *                 If num is less than 'len' means that the last record was 
+ *                 reached or that buffer length exhausted. Unused entries 
+ *                 are signaled with seqnum = 0.
+ * 
+ * @return Error code (0 = OK).
+ */
+int ldb_direct_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len, char *buf, size_t buf_len, size_t *num);
 
 /**
  * Return statistics between seqnum1 and seqnum2 (both included).
@@ -342,6 +379,7 @@ int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t l
  * @param[in] seqnum1 First sequence number.
  * @param[in] seqnum2 Second sequence number (greater than or equal to seqnum1).
  * @param[out] stats Uninitialized statistics.
+ * 
  * @return Error code (0 = OK).
  */
 int ldb_stats(ldb_journal_t *obj, uint64_t seqnum1, uint64_t seqnum2, ldb_stats_t *stats);
@@ -355,6 +393,7 @@ int ldb_stats(ldb_journal_t *obj, uint64_t seqnum1, uint64_t seqnum2, ldb_stats_
  * @param[in] ts Timestamp to search.
  * @param[in] mode Search mode.
  * @param[out] seqnum Resulting seqnum (distinct from NULL, 0 = NOT_FOUND).
+ * 
  * @return Error code (0 = OK).
  */
 int ldb_search(ldb_journal_t *obj, uint64_t ts, ldb_search_e mode, uint64_t *seqnum);
@@ -368,6 +407,7 @@ int ldb_search(ldb_journal_t *obj, uint64_t ts, ldb_search_e mode, uint64_t *seq
  * 
  * @param[in] obj Journal to update.
  * @param[in] seqnum Sequence number from which records are removed (seqnum=0 removes all content).
+ * 
  * @return Number of removed entries, or error if negative.
  */
 long ldb_rollback(ldb_journal_t *obj, uint64_t seqnum);
@@ -388,6 +428,7 @@ long ldb_rollback(ldb_journal_t *obj, uint64_t seqnum);
  * 
  * @param[in] obj Journal to update.
  * @param[in] seqnum Sequence number up to which records are removed.
+ * 
  * @return Number of removed entries, or error if negative.
  */
 long ldb_purge(ldb_journal_t *obj, uint64_t seqnum);
@@ -467,6 +508,8 @@ class journal_t
     int read(uint64_t seqnum, ldb_entry_t *entries, size_t len, size_t *num) { 
         return ldb_read(m_journal, seqnum, entries, len, num);
     }
+
+    //TODO: add read_direct() method
 
     int stats(uint64_t seqnum1, uint64_t seqnum2, ldb_stats_t *stats) {
         return ldb_stats(m_journal, seqnum1, seqnum2, stats);

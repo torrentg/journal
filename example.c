@@ -53,11 +53,10 @@ int run(ldb_journal_t *journal)
     size_t num = 0;
     int rc = 0;
 
-    // don't mix read and write entries, they have distinct memory-owner
-    ldb_entry_t wentries[MAX_ENTRIES] = {{0}};
-    ldb_entry_t rentries[MAX_ENTRIES] = {{0}};
-    ldb_entry_t wentry = {0};
-    ldb_entry_t rentry = {0};
+    size_t buf_len = 128;
+    char *buf = malloc(buf_len);
+    ldb_entry_t entries[MAX_ENTRIES] = {{0}};
+    ldb_entry_t entry = {0};
 
     // remove existing journal
     remove("example.dat");
@@ -67,49 +66,62 @@ int run(ldb_journal_t *journal)
     rc = ldb_open(journal, "", "example", true);
     print_result("open", rc);
 
-    wentry = create_random_entry(1000, 42);
-    rc = ldb_append(journal, &wentry, 1, NULL);
+    entry = create_random_entry(1000, 42);
+    rc = ldb_append(journal, &entry, 1, NULL);
     print_result("append initial entry (sn=1000 and ts=42)", rc);
 
-    wentry = create_random_entry(1001, 42);
-    rc = ldb_append(journal, &wentry, 1, NULL);
+    entry = create_random_entry(1001, 42);
+    rc = ldb_append(journal, &entry, 1, NULL);
     print_result("append entry with correlative seqnum", rc);
 
-    wentry.seqnum = 999;
-    rc = ldb_append(journal, &wentry, 1, NULL);
+    entry.seqnum = 999;
+    rc = ldb_append(journal, &entry, 1, NULL);
     print_result("append entry with non-correlative seqnum", rc);
 
-    wentry.seqnum = 1002;
-    wentry.timestamp = 40;
-    rc = ldb_append(journal, &wentry, 1, NULL);
+    entry.seqnum = 1002;
+    entry.timestamp = 40;
+    rc = ldb_append(journal, &entry, 1, NULL);
     print_result("append entry with timestamp less than previous", rc);
 
-    wentry = create_random_entry(0, 43);
-    rc = ldb_append(journal, &wentry, 1, NULL);
-    print_result("append entry with seqnum = 0 (assigned next value, %zu)", rc, wentry.seqnum);
+    entry = create_random_entry(0, 43);
+    rc = ldb_append(journal, &entry, 1, NULL);
+    print_result("append entry with seqnum = 0 (assigned next value, %zu)", rc, entry.seqnum);
 
-    wentry = create_random_entry(0, 0);
-    rc = ldb_append(journal, &wentry, 1, NULL);
+    entry = create_random_entry(0, 0);
+    rc = ldb_append(journal, &entry, 1, NULL);
     print_result("append entry with timestamp = 0 (assigned current millis)", rc);
 
     // you can enter a batch of entries (1 single flush is done at the end)
     for (size_t i = 0; i < MAX_ENTRIES; i++) {
-        wentries[i] = create_random_entry(0, 0);
+        entries[i] = create_random_entry(0, 0);
     }
-    rc = ldb_append(journal, wentries, MAX_ENTRIES, NULL);
+    rc = ldb_append(journal, entries, MAX_ENTRIES, NULL);
     print_result("append 10 entries in a row", rc);
 
     /// timestamp of last entry
-    timestamp = wentries[MAX_ENTRIES-1].timestamp;
+    timestamp = entries[MAX_ENTRIES-1].timestamp;
 
-    rc = ldb_read(journal, 1001, &rentry, 1, NULL);
+    rc = ldb_direct_read(journal, 1001, &entry, 1, buf, buf_len, NULL);
     print_result("read existing entry (sn=1001)", rc);
 
-    rc = ldb_read(journal, 9999, &rentry, 1, NULL);
+    rc = ldb_read(journal, 9999, &entry, 1, NULL);
     print_result("read non-existing entry (sn=9999)", rc);
 
+    // we need to allocate/reallocate the buffer to store the data
+    rc = ldb_stats(journal, 1010, 1020, &stats);
+    print_result("stats range [1010-1020] (num-entries=%zu, size=%zu)", rc, stats.num_entries, stats.index_size + stats.data_size);
+
+    if (buf_len < stats.data_size)
+    {
+        char *aux = (char *) realloc(buf, stats.data_size);
+        if (aux != NULL) {
+            buf_len = stats.data_size;
+            buf = aux;
+        }
+    }
+
     // you can read multiple entries in a row
-    rc = ldb_read(journal, 1010, rentries, MAX_ENTRIES, &num);
+    rc = ldb_direct_read(journal, 1010, entries, MAX_ENTRIES, buf, buf_len, &num);
     print_result("read %d entries starting at 1010 (read-entries=%zu)", rc, MAX_ENTRIES, num);
 
     rc = ldb_stats(journal, 0, 9999, &stats);
@@ -158,16 +170,26 @@ int run(ldb_journal_t *journal)
     rc = ldb_stats(journal, 0, UINT64_MAX, &stats);
     for (size_t sn = stats.min_seqnum; sn <= stats.max_seqnum; sn += MAX_ENTRIES)
     {
-        ldb_read(journal, sn, rentries, MAX_ENTRIES, &num);
+        ldb_stats_t tmp = {0};
+        rc = ldb_stats(journal, sn, sn + MAX_ENTRIES, &tmp);
+
+        if (buf_len < tmp.data_size)
+        {
+            char *aux = (char *) realloc(buf, tmp.data_size);
+            if (aux != NULL) {
+                buf_len = tmp.data_size;
+                buf = aux;
+            }
+        }
+    
+        ldb_direct_read(journal, sn, entries, MAX_ENTRIES, buf, buf_len, &num);
         for (size_t i = 0; i < num; i++)
-            print_entry("  ", rentries + i);
+            print_entry("  ", entries + i);
     }
 
     rc = ldb_close(journal);
 
-    // free entries used to read
-    ldb_free_entry(&rentry);
-    ldb_free_entries(rentries, 10);
+    free(buf);
 
     return 0;
 }

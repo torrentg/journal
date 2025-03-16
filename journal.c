@@ -34,6 +34,8 @@
 #define LDB_MAGIC_NUMBER        0x211ABF1A62646C00
 #define LDB_FORMAT_1            1
 
+#define MIN(a,b) (((a)<(b))?(a):(b))
+
 #if defined(__GNUC__) || defined(__clang__) || defined(__INTEL_LLVM_COMPILER) 
     #define LDB_INLINE  __attribute__((const)) __attribute__((always_inline)) inline
     #define PACKED      __attribute__((__packed__))
@@ -50,6 +52,13 @@
 #ifndef fallthrough
     # define fallthrough   do {} while (0)  /* fallthrough */
 #endif
+
+typedef struct ldb_state_t {
+    uint64_t seqnum1;             // First sequence number (0 means no entries).
+    uint64_t timestamp1;          // Timestamp of the first entry.
+    uint64_t seqnum2;             // Last sequence number (0 means no entries).
+    uint64_t timestamp2;          // Timestamp of the last entry.
+} ldb_state_t;
 
 typedef struct ldb_impl_t
 {
@@ -609,7 +618,7 @@ static uint32_t ldb_checksum_record(ldb_record_dat_t *record)
     checksum = ldb_crc32((const char *) &record->timestamp, sizeof(record->timestamp), checksum);
     checksum = ldb_crc32((const char *) &record->data_len, sizeof(record->data_len), checksum);
 
-    // required calls to complete the checksum
+    // required call to complete the checksum
     // call checksum = crc32(data, checksum)
 
     return checksum;
@@ -1441,6 +1450,128 @@ int ldb_read(ldb_impl_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len,
         if (num != NULL)
             (*num)++;
     }
+
+    ret = LDB_OK;
+
+LDB_READ_END:
+    pthread_mutex_unlock(&obj->mutex_files);
+    return ret;
+}
+
+#undef exit_function
+#define exit_function(errnum) do { ret = errnum; goto LDB_READ_END; } while(0)
+
+int ldb_direct_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len, char *buf, size_t buf_len, size_t *num)
+{
+    if (!obj || !entries || len == 0 || !buf || buf_len < sizeof(ldb_record_dat_t))
+        return LDB_ERR_ARG;
+
+    if (num != NULL)
+        *num = 0;
+
+    for (size_t i = 0; i < len; i++) {
+        entries[i].seqnum = 0;
+        entries[i].timestamp = 0;
+        entries[i].data_len = 0;
+        entries[i].data = NULL;
+    }
+
+    pthread_mutex_lock(&obj->mutex_files);
+
+    int ret = LDB_ERR;
+    int dat_fd = -1;
+    int idx_fd = -1;
+    uint64_t read_pos = 0;
+    uint64_t read_bytes = 0;
+    ldb_state_t state = {0};
+    ldb_record_idx_t record_idx = {0};
+    const ldb_record_dat_t *record_dat_ptr = NULL;
+    ssize_t bytes = 0;
+    uint64_t seq = 0;
+    size_t idx = 0;
+
+    if (!ldb_is_valid_obj(obj))
+        exit_function(LDB_ERR);
+
+    dat_fd = fileno(obj->dat_fp);
+    idx_fd = fileno(obj->idx_fp);
+
+    pthread_mutex_lock(&obj->mutex_state);
+    state = obj->state;
+    pthread_mutex_unlock(&obj->mutex_state);
+
+    if (seqnum == 0 || seqnum < state.seqnum1 || seqnum > state.seqnum2)
+        exit_function(LDB_ERR_NOT_FOUND);
+
+    if ((ret = ldb_read_record_idx(idx_fd, &state, seqnum, &record_idx)) != LDB_OK)
+        exit_function(ret);
+
+    read_pos = record_idx.pos;
+
+    if (seqnum + len <= state.seqnum2)
+    {
+        if ((ret = ldb_read_record_idx(idx_fd, &state, seqnum + len, &record_idx)) != LDB_OK)
+            exit_function(ret);
+
+        assert(record_idx.pos > read_pos);
+        read_bytes = MIN(record_idx.pos - read_pos, buf_len);
+    }
+    else
+    {
+        read_bytes = buf_len;
+    }
+
+    bytes = pread(dat_fd, buf, read_bytes, (off_t) read_pos);
+
+    if (bytes < (ssize_t) sizeof(ldb_record_dat_t))
+        return LDB_ERR_READ_DAT;
+
+    seq = seqnum - 1;
+
+    while (idx < len && seq < state.seqnum2)
+    {
+        if (bytes < (ssize_t) sizeof(ldb_record_dat_t))
+        {
+            // In this skewed case (buffer overflow and read() ending in the 
+            // middle of a record), we invalidate the previous entry (that 
+            // was succesfully read). This avoid us from doing an additional
+            // reading and allows us to notify the caller that the buffer
+            // is too small.
+
+            assert(idx > 0);
+            entries[idx - 1].data = NULL;
+            idx--;
+            break;
+        }
+
+        record_dat_ptr = (ldb_record_dat_t *) buf;
+
+        assert(seq + 1 == record_dat_ptr->seqnum);
+
+        entries[idx].seqnum = record_dat_ptr->seqnum;
+        entries[idx].timestamp = record_dat_ptr->timestamp;
+        entries[idx].data_len = record_dat_ptr->data_len;
+        entries[idx].data = buf + sizeof(ldb_record_dat_t);
+
+        buf += sizeof(ldb_record_dat_t);
+        bytes -= sizeof(ldb_record_dat_t);
+
+        if (bytes < (ssize_t) record_dat_ptr->data_len) {
+            entries[idx].data = NULL;
+            break;
+        }
+
+        buf += record_dat_ptr->data_len;
+        bytes -= record_dat_ptr->data_len;
+
+        seq = record_dat_ptr->seqnum;
+        idx++;
+    }
+
+    if (num != NULL)
+        *num = idx;
+
+    // TODO: validate checksum
 
     ret = LDB_OK;
 

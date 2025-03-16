@@ -172,7 +172,7 @@ static void * run_write(void *args)
 
     while ( !interrupted &&
             results->rc == LDB_OK &&
-            results->time_ms < 1000*params->max_seconds && 
+            results->time_ms < 1000 * params->max_seconds && 
             results->num_records < params->max_records &&
             results->num_bytes < params->max_bytes)
     {
@@ -191,7 +191,7 @@ static void * run_write(void *args)
         while(true)
         {
             results->time_ms = get_millis() - time0;
-            if (results->time_ms >= 1000*params->max_seconds)
+            if (results->time_ms >= 1000 * params->max_seconds)
                 break;
 
             double seconds = (double) results->time_ms / 1000.0;
@@ -216,6 +216,8 @@ static void * run_read(void *args)
 
     size_t num_entries = params->records_per_query;
     ldb_entry_t *entries = calloc(num_entries, sizeof(ldb_entry_t));
+    size_t buf_len = 1024;
+    char *buf = malloc(buf_len);
     uint64_t time0 = get_millis();
     ldb_stats_t stats = {0};
     uint64_t seqnum = 0;
@@ -226,7 +228,7 @@ static void * run_read(void *args)
 
     while ( !interrupted &&
             results->rc == LDB_OK &&
-            results->time_ms < 1000*params->max_seconds && 
+            results->time_ms < 1000 * params->max_seconds && 
             results->num_records < params->max_records &&
             results->num_bytes < params->max_bytes)
     {
@@ -235,9 +237,18 @@ static void * run_read(void *args)
 
         if (stats.num_entries)
         {
+            if (buf_len < stats.data_size)
+            {
+                char *aux = (char *) realloc(buf, stats.data_size);
+                if (aux != NULL) {
+                    buf_len = stats.data_size;
+                    buf = aux;
+                }
+            }
+
             seqnum = stats.min_seqnum + rand() % stats.num_entries;
 
-            if ((results->rc = ldb_read(journal, seqnum, entries, num_entries, &num)) != LDB_OK)
+            if ((results->rc = ldb_direct_read(journal, seqnum, entries, num_entries, buf, buf_len, &num)) != LDB_OK)
                 break;
 
             results->num_queries += (num > 0 ? 1 : 0);
@@ -250,7 +261,7 @@ static void * run_read(void *args)
         while (true)
         {
             results->time_ms = get_millis() - time0;
-            if (results->time_ms >= 1000*params->max_seconds)
+            if (results->time_ms >= 1000 * params->max_seconds)
                 break;
 
             double seconds = (double) results->time_ms / 1000.0;
@@ -262,8 +273,8 @@ static void * run_read(void *args)
         }
     }
 
-    ldb_free_entries(entries, num_entries);
     free(entries);
+    free(buf);
     return NULL;
 }
 

@@ -997,6 +997,124 @@ void test_read_nominal_case(void)
     ldb_close(&journal);
 }
 
+//---
+
+void test_direct_read_invalid_args(void)
+{
+    ldb_journal_t journal = {0};
+    ldb_entry_t entries[3] = {{0}};
+    char buf[1024] = {0};
+
+    TEST_ASSERT(ldb_direct_read(NULL, 1, entries, 3, buf, sizeof(buf), NULL) == LDB_ERR_ARG);     // NULL journal
+    TEST_ASSERT(ldb_direct_read(&journal, 1, NULL, 3, buf, sizeof(buf), NULL) == LDB_ERR_ARG);    // NULL entries
+    TEST_ASSERT(ldb_direct_read(&journal, 1, entries, 0, buf, sizeof(buf), NULL) == LDB_ERR_ARG); // length(entries) = 0
+    TEST_ASSERT(ldb_direct_read(&journal, 1, entries, 3, NULL, sizeof(buf), NULL) == LDB_ERR_ARG); // NULL buffer
+    TEST_ASSERT(ldb_direct_read(&journal, 1, entries, 3, buf, 3, NULL) == LDB_ERR_ARG);            // length(buf) < 24
+    TEST_ASSERT(ldb_direct_read(&journal, 1, entries, 3, buf, sizeof(buf), NULL) == LDB_ERR);      // journal obj not valid
+}
+
+void test_direct_read_empty(void)
+{
+    ldb_journal_t journal = {0};
+    ldb_entry_t entries[3] = {{0}};
+    char buf[1024] = {0};
+    size_t num = 10;
+
+    remove("test.dat");
+    remove("test.idx");
+
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    entries[0].seqnum = 5;
+    entries[1].seqnum = 15;
+    entries[2].seqnum = 25;
+
+    TEST_ASSERT(ldb_direct_read(&journal, 0, entries, 3, buf, sizeof(buf), &num) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(num == 0);
+
+    TEST_ASSERT(ldb_direct_read(&journal, 2, entries, 3, buf, sizeof(buf), &num) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(num == 0);
+
+    TEST_ASSERT(entries[0].seqnum == 0);
+    TEST_ASSERT(entries[1].seqnum == 0);
+    TEST_ASSERT(entries[2].seqnum == 0);
+
+    ldb_close(&journal);
+}
+
+void test_direct_read_nominal_case(void)
+{
+    ldb_journal_t journal = {0};
+    ldb_entry_t entries[10] = {{0}};
+    char buf[1024] = {0};
+    size_t num = 0;
+
+    remove("test.dat");
+    remove("test.idx");
+
+    TEST_ASSERT(ldb_open(&journal, "", "test", false) == LDB_OK);
+    append_entries(&journal, 20, 314);
+
+    TEST_ASSERT(ldb_direct_read(&journal, 0, entries, 3, buf, sizeof(buf), &num) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(num == 0);
+
+    TEST_ASSERT(ldb_direct_read(&journal, 10, entries, 3, buf, sizeof(buf), &num) == LDB_ERR_NOT_FOUND);
+    TEST_ASSERT(num == 0);
+
+    TEST_ASSERT(ldb_direct_read(&journal, 20, entries, 3, buf, sizeof(buf), &num) == LDB_OK);
+    TEST_ASSERT(num == 3);
+    TEST_CHECK(check_entry(&entries[0], 20, "data-20"));
+    TEST_CHECK(check_entry(&entries[1], 21, "data-21"));
+    TEST_CHECK(check_entry(&entries[2], 22, "data-22"));
+
+    TEST_ASSERT(ldb_direct_read(&journal, 40, entries, 2, buf, sizeof(buf), &num) == LDB_OK);
+    TEST_ASSERT(num == 2);
+    TEST_CHECK(check_entry(&entries[0], 40, "data-40"));
+    TEST_CHECK(check_entry(&entries[1], 41, "data-41"));
+
+    TEST_ASSERT(ldb_direct_read(&journal, 313, entries, 3, buf, sizeof(buf), &num) == LDB_OK);
+    TEST_ASSERT(num == 2);
+    TEST_CHECK(check_entry(&entries[0], 313, "data-313"));
+    TEST_CHECK(check_entry(&entries[1], 314, "data-314"));
+
+    TEST_ASSERT(ldb_direct_read(&journal, 400, entries, 3, buf, sizeof(buf), &num) == LDB_ERR_NOT_FOUND);
+    TEST_CHECK(num == 0);
+
+    // case0: buffer too small (read truncates 1st entry header)
+    // entry1 = 24 + 8 = 32, entry2 = 24 + 8 = 32
+    TEST_CHECK(ldb_direct_read(&journal, 20, entries, 3, buf, 22, &num) == LDB_ERR_ARG);
+
+    // case1: buffer too small (read truncates 1st entry data)
+    // entry1 = 24 + 8 = 32, entry2 = 24 + 8 = 32
+    TEST_ASSERT(ldb_direct_read(&journal, 20, entries, 3, buf, 30, &num) == LDB_OK);
+    TEST_CHECK(num == 0);
+    TEST_CHECK(entries[0].seqnum == 20);
+    TEST_CHECK(entries[0].data_len == 8);
+    TEST_CHECK(entries[0].data == NULL);
+    TEST_CHECK(entries[1].seqnum == 0);
+
+    // case2: buffer too small (read truncates 2nd entry header)
+    // entry1 = 24 + 8 = 32, entry2 = 24 + 8 = 32
+    TEST_ASSERT(ldb_direct_read(&journal, 20, entries, 3, buf, 36, &num) == LDB_OK);
+    TEST_CHECK(num == 0);
+    TEST_CHECK(entries[0].seqnum == 20);
+    TEST_CHECK(entries[0].data_len == 8);
+    TEST_CHECK(entries[0].data == NULL);
+    TEST_CHECK(entries[1].seqnum == 0);
+
+    // case3: buffer too small (read truncates 2nd entry data)
+    TEST_ASSERT(ldb_direct_read(&journal, 20, entries, 3, buf, 58, &num) == LDB_OK);
+    TEST_ASSERT(num == 1);
+    TEST_CHECK(check_entry(&entries[0], 20, "data-20"));
+    TEST_CHECK(entries[1].seqnum == 21);
+    TEST_CHECK(entries[1].data_len == 8);
+    TEST_CHECK(entries[1].data == NULL);
+    TEST_CHECK(entries[2].seqnum == 0);
+
+    ldb_close(&journal);
+}
+
+//---
+
 void test_stats_invalid_args(void)
 {
     ldb_journal_t journal = {0};
@@ -1340,6 +1458,11 @@ TEST_LIST = {
     { "read() invalid args",          test_read_invalid_args },
     { "read() empty journal",         test_read_empty },
     { "read() nominal case",          test_read_nominal_case },
+
+    { "direct_read() invalid args",   test_direct_read_invalid_args },
+    { "direct_read() empty journal",  test_direct_read_empty },
+    { "direct_read() nominal case",   test_direct_read_nominal_case },
+
     { "stats() invalid args",         test_stats_invalid_args },
     { "stats() nominal case",         test_stats_nominal_case },
     { "search() invalid args",        test_search_invalid_args },
