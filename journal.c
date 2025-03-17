@@ -82,6 +82,7 @@ typedef struct ldb_impl_t
 typedef struct PACKED ldb_header_dat_t {
     uint64_t magic_number;
     uint32_t format;
+    uint32_t padding;
     char metadata[LDB_METADATA_LEN];
 } ldb_header_dat_t;
 
@@ -379,6 +380,7 @@ static bool ldb_create_file_dat(const char *path)
     ldb_header_dat_t header = {
         .magic_number = LDB_DAT_MAGIC_NUMBER,
         .format = LDB_FILE_FORMAT,
+        .padding = 0,
         .metadata = {0}
     };
 

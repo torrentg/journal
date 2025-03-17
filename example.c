@@ -66,6 +66,12 @@ int run(ldb_journal_t *journal)
     rc = ldb_open(journal, "", "example", true);
     print_result("open", rc);
 
+    rc = ldb_set_meta(journal, "format=1.6", 16);
+    print_result("set metadata", rc);
+
+    rc = ldb_get_meta(journal, buf, LDB_METADATA_LEN);
+    print_result("get metadata (%s)", rc, buf);
+
     entry = create_random_entry(1000, 42);
     rc = ldb_append(journal, &entry, 1, NULL);
     print_result("append initial entry (sn=1000 and ts=42)", rc);

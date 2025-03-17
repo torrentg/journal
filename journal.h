@@ -144,7 +144,7 @@ SOFTWARE.
 #define LDB_ERR_CHECKSUM         -19
 #define LDB_ERR_LOCK             -20
 
-#define LDB_METADATA_LEN        (4 + 64)
+#define LDB_METADATA_LEN          64
 
 #ifdef __cplusplus
 extern "C" {
@@ -480,6 +480,14 @@ class journal_t
 
     int set_fsync(bool enable) {
         return ldb_set_fsync(m_journal, enable);
+    }
+
+    int set_meta(const char *meta, size_t len) {
+        return ldb_set_meta(m_journal, meta, len);
+    }
+
+    int get_meta(char *meta, size_t len) {
+        return ldb_get_meta(m_journal, meta, len);
     }
 
     int append(ldb_entry_t *entries, size_t len, size_t *num) { 

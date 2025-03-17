@@ -268,6 +268,7 @@ void test_open_invl_dat_header(void)
     ldb_header_dat_t header = {
         .magic_number = LDB_DAT_MAGIC_NUMBER,
         .format = LDB_FILE_FORMAT,
+        .padding = 0,
         .metadata = {0}
     };
 
