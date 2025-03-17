@@ -736,7 +736,7 @@ static int ldb_read_record_idx(int fd, ldb_state_t *state, uint64_t seqnum, ldb_
 
     size_t pos = ldb_get_pos_idx(state, seqnum);
 
-    if (pread(fd, record, sizeof(ldb_record_idx_t), (off_t) pos) != sizeof(ldb_record_idx_t))
+    if (pread(fd, record, sizeof(ldb_record_idx_t), (off_t) pos) != (ssize_t) sizeof(ldb_record_idx_t))
         return LDB_ERR_READ_IDX;
 
     if (record->seqnum != seqnum)
@@ -792,7 +792,7 @@ static int ldb_open_file_dat(ldb_impl_t *obj, bool check)
 
     len = ldb_get_file_size(obj->dat_fp);
 
-    if (pread(dat_fd, &header, sizeof(ldb_header_dat_t), 0) != sizeof(ldb_header_dat_t))
+    if (pread(dat_fd, &header, sizeof(ldb_header_dat_t), 0) != (ssize_t) sizeof(ldb_header_dat_t))
         exit_function(LDB_ERR_FMT_DAT);
 
     pos += sizeof(ldb_header_dat_t);
@@ -938,7 +938,7 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
     if (fseek(obj->idx_fp, 0, SEEK_END) == -1)
         exit_function(LDB_ERR_OPEN_IDX);
 
-    if (pread(idx_fd, &header, sizeof(ldb_header_idx_t), 0) != sizeof(ldb_header_idx_t))
+    if (pread(idx_fd, &header, sizeof(ldb_header_idx_t), 0) != (ssize_t) sizeof(ldb_header_idx_t))
         exit_function(LDB_ERR_FMT_IDX);
 
     pos += sizeof(ldb_header_idx_t);
@@ -955,7 +955,7 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
     if (pos + sizeof(ldb_record_idx_t) <= len)
     {
         // read first entry
-        if (pread(idx_fd, &record_0, sizeof(ldb_record_idx_t), (off_t) pos) != sizeof(ldb_record_idx_t)) 
+        if (pread(idx_fd, &record_0, sizeof(ldb_record_idx_t), (off_t) pos) != (ssize_t) sizeof(ldb_record_idx_t)) 
             exit_function(LDB_ERR_READ_IDX);
 
         pos += sizeof(ldb_record_idx_t);
@@ -983,7 +983,7 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
 
         while (pos + sizeof(ldb_record_idx_t) <= len)
         {
-            if (pread(idx_fd, &aux, sizeof(ldb_record_idx_t), (off_t) pos) != sizeof(ldb_record_idx_t)) 
+            if (pread(idx_fd, &aux, sizeof(ldb_record_idx_t), (off_t) pos) != (ssize_t) sizeof(ldb_record_idx_t)) 
                 exit_function(LDB_ERR_READ_IDX);
 
             if (aux.seqnum == 0)
@@ -1015,7 +1015,7 @@ static int ldb_open_file_idx(ldb_impl_t *obj, bool check)
         {
             off_t new_pos = (off_t)(pos - sizeof(ldb_record_idx_t));
 
-            if (pread(idx_fd, &record_n, sizeof(ldb_record_idx_t), new_pos) != sizeof(ldb_record_idx_t)) 
+            if (pread(idx_fd, &record_n, sizeof(ldb_record_idx_t), new_pos) != (ssize_t) sizeof(ldb_record_idx_t)) 
                 exit_function(LDB_ERR_READ_IDX);
 
             if (record_n.seqnum != 0)
@@ -1401,7 +1401,7 @@ int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t l
         assert(((uintptr_t) entries[idx].data) % sizeof(uintptr_t) == 0);
 
         buf += sizeof(ldb_record_dat_t);
-        bytes -= sizeof(ldb_record_dat_t);
+        bytes -= (ssize_t) sizeof(ldb_record_dat_t);
 
         if (bytes < (ssize_t) record_dat_ptr->data_len) {
             entries[idx].data = NULL;
@@ -1414,7 +1414,7 @@ int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t l
         padding = ldb_min(ldb_padding(record_dat_ptr->data_len), (size_t) bytes);
 
         buf += padding;
-        bytes -= padding;
+        bytes -= (ssize_t) padding;
 
         seq = record_dat_ptr->seqnum;
         idx++;
@@ -1744,8 +1744,8 @@ long ldb_purge(ldb_impl_t *obj, uint64_t seqnum)
 
     removed_entries = (long) seqnum - (long) obj->state.seqnum1;
 
-    if ((ret = pread(dat_fd, &header_dat, sizeof(ldb_header_dat_t), 0)) != sizeof(ldb_header_dat_t))
-        exit_function(ret);
+    if (pread(dat_fd, &header_dat, sizeof(ldb_header_dat_t), 0) != (ssize_t) sizeof(ldb_header_dat_t))
+        exit_function(LDB_ERR_READ_DAT);
 
     if ((ret = ldb_read_record_idx(idx_fd, &obj->state, seqnum, &record_idx)) != LDB_OK)
         exit_function(ret);
@@ -1848,7 +1848,7 @@ int ldb_set_meta(ldb_journal_t *obj, const char *meta, size_t len)
 
     if (len < LDB_METADATA_LEN)
     {
-        pos += len;
+        pos += (off_t) len;
         len = LDB_METADATA_LEN - len;
 
         if (pwrite(dat_fd, zero, len, pos) != (ssize_t) len)
