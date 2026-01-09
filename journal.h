@@ -330,10 +330,10 @@ int ldb_append(ldb_journal_t *obj, ldb_entry_t *entries, size_t len, size_t *num
  *   - entries param contains the read entries
  *   - if num = len, all requested data was read
  *   - otherwise (num < len)
- *     - if entries[num].rev == 0 => last record reached
- *     - if entries[num].rev != 0 => not enough memory in buffer
+ *     - if entries[num].seqnum == 0 => last record reached
+ *     - if entries[num].seqnum != 0 => not enough memory in buffer
  *          entries[num] is filled correctly but data pointer is NULL
- *          If the current buffer size is great than buffer[num].data_size you can
+ *          If the current buffer size is great than entries[num].data_len you can
  *          call ldb_read(obj, entries[num].seqnum, entries, len - num, ...) again.
  *          Otherwise you need to reallocate the buffer with at least entries[num].data_len + 24 bytes.
  *   - unused entries are signaled with seqnum = 0

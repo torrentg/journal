@@ -336,7 +336,7 @@ static bool ldb_is_valid_name(const char *name)
     while (*ptr != 0 && (isalnum(*ptr) || *ptr == '_'))
         ptr++;
 
-    return (*ptr == 0 && ptr - name < LDB_NAME_MAX_LENGTH);
+    return (*ptr == 0 && ptr - name <= LDB_NAME_MAX_LENGTH);
 }
 
 static char * ldb_create_filename(const char *path, const char *name, const char *ext)
@@ -1174,16 +1174,17 @@ int ldb_open(ldb_impl_t *obj, const char *path, const char *name, bool check)
     memset(obj, 0x00, sizeof(ldb_impl_t));
 
     obj->name = strdup(name);
-    obj->force_fsync = false;
-    pthread_mutex_init(&obj->mutex_state, NULL);
-    pthread_mutex_init(&obj->mutex_files, NULL);
     obj->path = strdup(path);
     obj->dat_path = ldb_create_filename(path, name, LDB_EXT_DAT);
     obj->idx_path = ldb_create_filename(path, name, LDB_EXT_IDX);
-    obj->dat_end = sizeof(ldb_header_dat_t);
 
     if (!obj->name || !obj->path || !obj->dat_path || !obj->idx_path)
         exit_function(LDB_ERR_MEM);
+
+    obj->force_fsync = false;
+    obj->dat_end = sizeof(ldb_header_dat_t);
+    pthread_mutex_init(&obj->mutex_state, NULL);
+    pthread_mutex_init(&obj->mutex_files, NULL);
 
     // case dat file not exist
     if (access(obj->dat_path, F_OK) != 0)
