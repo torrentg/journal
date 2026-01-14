@@ -2,7 +2,7 @@
 CFLAGS= -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -Wnull-dereference -pthread
 LDFLAGS= -lpthread
 
-TARGETS = tests example performance
+TARGETS = tests example performance journalctl
 
 .PHONY: all clean coverage valgrind helgrind cppcheck loc
 
@@ -16,6 +16,9 @@ example: example.c journal.h journal.c
 
 performance: performance.c journal.h journal.c
 	$(CC) -g $(CFLAGS) -O2 -o $@ performance.c journal.c $(LDFLAGS)
+
+journalctl: journalctl.c journal.h journal.c
+	$(CC) -g $(CFLAGS) -O2 -o $@ journalctl.c $(LDFLAGS)
 
 coverage: tests.c journal.h journal.c
 	$(CC) --coverage -O0 $(CFLAGS) -o tests-coverage tests.c -lgcov $(LDFLAGS)
@@ -34,7 +37,7 @@ cppcheck: journal.h journal.c
 	cppcheck --enable=all --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=assertWithSideEffect --suppress=checkersReport journal.c
 
 loc:
-	cloc journal.h journal.c tests.c example.c performance.c
+	cloc journal.h journal.c tests.c example.c performance.c journalctl.c
 
 clean: 
 	rm -f $(TARGETS)

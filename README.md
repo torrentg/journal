@@ -103,7 +103,8 @@ ldb_free(journal);
 
 Read the function documentation in `journal.h`.<br/>
 See [`example.c`](example.c) for basic function usage.<br/>
-See [`performance.c`](performance.c) for concurrent usage.
+See [`performance.c`](performance.c) for concurrent usage.<br/>
+See [`journalctl.c`](journalctl.c) for a tool for basic maintenance and inspection.
 
 ## Contributors
 
