@@ -1243,14 +1243,14 @@ LDB_OPEN_ERR:
 
 int ldb_append(ldb_impl_t *obj, ldb_entry_t *entries, size_t len, size_t *num)
 {
+    if (num != NULL)
+        *num = 0;
+
     if (!obj || !entries)
         return LDB_ERR_ARG;
 
     if (!ldb_is_valid_obj(obj))
         return LDB_ERR;
-
-    if (num != NULL)
-        *num = 0;
 
     if (len == 0)
         return LDB_OK;
@@ -1310,11 +1310,11 @@ int ldb_append(ldb_impl_t *obj, ldb_entry_t *entries, size_t len, size_t *num)
 
 int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t len, char *buf, size_t buf_len, size_t *num)
 {
-    if (!obj || !entries || len == 0 || !buf || buf_len < sizeof(ldb_record_dat_t))
-        return LDB_ERR_ARG;
-
     if (num != NULL)
         *num = 0;
+
+    if (!obj || !entries || len == 0 || !buf || buf_len < sizeof(ldb_record_dat_t))
+        return LDB_ERR_ARG;
 
     for (size_t i = 0; i < len; i++) {
         entries[i].seqnum = 0;
