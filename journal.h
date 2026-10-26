@@ -144,9 +144,10 @@ SOFTWARE.
 #define LDB_ERR_NOT_FOUND        -24
 #define LDB_ERR_LOCK             -25
 
-#define LDB_OPEN_CREATE          (1 << 0)   // Create journal if it does not exist (default: false)
-#define LDB_OPEN_READONLY        (1 << 1)   // Open journal in read-only mode (default: false)
-#define LDB_OPEN_FSYNC           (1 << 2)   // Enable fsync after each write (default: false)
+#define LDB_CREATE                 (1 << 0)   // Create journal if it does not exist (default: false)
+#define LDB_READONLY               (1 << 1)   // Open journal in read-only mode (default: false)
+#define LDB_FSYNC                  (1 << 2)   // Enable fsync after each write (default: false)
+#define LDB_CHECK                  (1 << 3)   // Verify entry checksum while reading (default: false)
 
 #define LDB_DAT_MAGIC_NUMBER       0x74616478656C706EULL
 #define LDB_IDX_MAGIC_NUMBER       0x78646978656C706EULL
@@ -203,14 +204,14 @@ void ldb_free(ldb_journal_t *obj);
 /**
  * Opens a journal.
  * 
- * Creates the journal files (dat+idx) if they do not exist (flag LDB_OPEN_CREATE).
+ * Creates the journal files (dat+idx) if they do not exist (flag LDB_CREATE).
  * Updates the index file if incomplete (not flushed + crash).
  * Rebuilds the index file when corrupted or not found.
  * 
  * @param[in,out] obj Uninitialized the journal object.
  * @param[in] path Directory where journal files are located.
  * @param[in] name Journal name (allowed characters: [a-zA-Z0-9_], max length = 32).
- * @param[in] flags Open flags (0, LDB_OPEN_CREATE, LDB_OPEN_READONLY, LDB_OPEN_FSYNC,
+ * @param[in] flags Open flags (0, LDB_CREATE, LDB_READONLY, LDB_FSYNC, LDB_CHECK,
  *                  or combination of them).
  * 
  * @return Error code (0 = OK). On error, the journal is closed properly (ldb_close not required).
@@ -481,7 +482,7 @@ class journal_t
 
     journal_t() = default;
 
-    journal_t(const std::filesystem::path &path, const std::string &name, int flags = LDB_OPEN_CREATE)
+    journal_t(const std::filesystem::path &path, const std::string &name, int flags = LDB_CREATE)
     {
         m_journal = ldb_alloc();
 

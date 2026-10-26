@@ -66,7 +66,7 @@ size_t num = 0;
 int rc = 0;
 
 journal = ldb_alloc();
-ldb_open(journal, "/my/directory", "example", LDB_OPEN_CREATE);
+ldb_open(journal, "/my/directory", "example", LDB_CREATE);
 
 ...
 

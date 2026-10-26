@@ -49,6 +49,7 @@ typedef struct ldb_impl_t
     uint32_t format;              // File format
     bool force_fsync;             // Force fsync after flush
     bool read_only;               // Journal opened in read-only mode
+    bool verify_checksum;         // Verify checksums on read()
 
     // Shared data (accessed by both threads)
     pthread_mutex_t mutex_state;  // Prevents race condition on state values
@@ -322,8 +323,9 @@ static int ldb_init(ldb_impl_t *obj, const char *path, const char *name, int fla
     pthread_mutex_init(&obj->mutex_state, NULL);
     pthread_mutex_init(&obj->mutex_files, NULL);
 
-    obj->force_fsync = ((flags & LDB_OPEN_FSYNC) != 0);
-    obj->read_only = ((flags & LDB_OPEN_READONLY) != 0);
+    obj->force_fsync = ((flags & LDB_FSYNC) != 0);
+    obj->read_only = ((flags & LDB_READONLY) != 0);
+    obj->verify_checksum = ((flags & LDB_CHECK) != 0);
     obj->dat_end = sizeof(ldb_header_dat_t);
 
     return LDB_OK;
@@ -666,7 +668,7 @@ static int ldb_append_record_idx(ldb_impl_t *obj, ldb_range_t *state, ldb_record
 
 // Read data record at pos.
 // File position is not modified.
-static int ldb_read_record_dat(int fd, size_t pos, ldb_record_dat_t *record, bool verify_checksum)
+static int ldb_read_record_dat(int fd, size_t pos, ldb_record_dat_t *record)
 {
     assert(record);
     assert(fd > STDERR_FILENO);
@@ -679,7 +681,7 @@ static int ldb_read_record_dat(int fd, size_t pos, ldb_record_dat_t *record, boo
     if (rc != sizeof(ldb_record_dat_t))
         return LDB_ERR_CORRUPT_DAT;
 
-    if (!verify_checksum || record->seqnum == 0)
+    if (record->seqnum == 0)
         return LDB_OK;
 
     uint32_t checksum = ldb_checksum_record(record);
@@ -804,7 +806,7 @@ static int ldb_open_dat(ldb_impl_t *obj)
     // read first entry (if any)
     if (pos + sizeof(ldb_record_dat_t) <= len)
     {
-        ret = ldb_read_record_dat(dat_fd, pos, &record, true);
+        ret = ldb_read_record_dat(dat_fd, pos, &record);
 
         if (ret == LDB_OK && record.seqnum != 0)
         {
@@ -937,7 +939,7 @@ static int ldb_open_idx(ldb_impl_t *obj)
         // derive last seqnum from its position in the idx file
         uint64_t last_seqnum = header.first_seqnum + (pos - sizeof(ldb_header_idx_t)) / sizeof(ldb_record_idx_t);
 
-        if (ldb_read_record_dat(dat_fd, record_n.pos, &record_dat, true) != LDB_OK)
+        if (ldb_read_record_dat(dat_fd, record_n.pos, &record_dat) != LDB_OK)
             exit_function(LDB_ERR_CORRUPT_IDX);
 
         // validate content against dat
@@ -948,7 +950,7 @@ static int ldb_open_idx(ldb_impl_t *obj)
         obj->dat_end = record_n.pos + sizeof(ldb_record_dat_t) + record_dat.data_len + ldb_padding(record_dat.data_len);
 
         // verify no unindexed entries remain in dat after the last indexed entry
-        if (ldb_read_record_dat(dat_fd, obj->dat_end, &record_dat, true) == LDB_OK) {
+        if (ldb_read_record_dat(dat_fd, obj->dat_end, &record_dat) == LDB_OK) {
             if (record_dat.seqnum == obj->state.max_seqnum + 1)
                 exit_function(LDB_ERR_CORRUPT_IDX);
         }
@@ -1029,7 +1031,7 @@ static int ldb_rebuild_idx(ldb_impl_t *obj)
     // Step 2: Scan dat and write idx in a single pass
     while (pos + sizeof(ldb_record_dat_t) <= dat_len)
     {
-        ret = ldb_read_record_dat(dat_fd, pos, &record_dat, true);
+        ret = ldb_read_record_dat(dat_fd, pos, &record_dat);
 
         if (ret != LDB_OK)
             break;
@@ -1122,7 +1124,7 @@ static int ldb_check_dat(ldb_impl_t *obj, bool repair)
     // scan all dat records
     while (pos + sizeof(ldb_record_dat_t) <= dat_len)
     {
-        ret = ldb_read_record_dat(dat_fd, pos, &record_dat, true);
+        ret = ldb_read_record_dat(dat_fd, pos, &record_dat);
 
         if (ret != LDB_OK && ret != LDB_ERR_CORRUPT_DAT && ret != LDB_ERR_CHECKSUM) {
             has_issues = true;
@@ -1247,7 +1249,7 @@ static int ldb_check_idx(ldb_impl_t *obj, bool repair)
             exit_function(LDB_ERR_CORRUPT_IDX);
         }
 
-        ret = ldb_read_record_dat(dat_fd, record_idx.pos, &record_dat, true);
+        ret = ldb_read_record_dat(dat_fd, record_idx.pos, &record_dat);
 
         if (ret != LDB_OK)
         {
@@ -1736,7 +1738,7 @@ int ldb_open(ldb_impl_t *obj, const char *path, const char *name, int flags)
     // case dat file not exist
     if (access(obj->dat_path, F_OK) != 0)
     {
-        if (!(flags & LDB_OPEN_CREATE))
+        if (!(flags & LDB_CREATE))
             exit_function(LDB_ERR_NOFILE_DAT);
 
         // READONLY does not apply in this case
@@ -1755,7 +1757,7 @@ int ldb_open(ldb_impl_t *obj, const char *path, const char *name, int flags)
     // case idx file not exist
     if (access(obj->idx_path, F_OK) != 0)
     {
-        if (flags & LDB_OPEN_READONLY)
+        if (flags & LDB_READONLY)
             exit_function(LDB_ERR_NOFILE_IDX);
     }
 
@@ -1765,7 +1767,7 @@ int ldb_open(ldb_impl_t *obj, const char *path, const char *name, int flags)
         if (ret != LDB_ERR_OPEN_IDX && ret != LDB_ERR_CORRUPT_IDX)
             exit_function(ret);
 
-        if (flags & LDB_OPEN_READONLY)
+        if (flags & LDB_READONLY)
             exit_function(ret);
 
         if ((ret = ldb_rebuild_idx(obj)) != LDB_OK)
@@ -1954,6 +1956,14 @@ int ldb_read(ldb_journal_t *obj, uint64_t seqnum, ldb_entry_t *entries, size_t l
 
         buf += padding;
         bytes -= (ssize_t)padding;
+
+        if (obj->verify_checksum)
+        {
+            uint32_t checksum = ldb_checksum_entry(&entries[idx]);
+
+            if (checksum != record_dat_ptr->checksum)
+                exit_function(LDB_ERR_CHECKSUM);
+        }
 
         seq = record_dat_ptr->seqnum;
         idx++;

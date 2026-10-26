@@ -14,7 +14,8 @@
 
 typedef struct {
     bool truncate;
-    bool force_sync;
+    bool force_fsync;
+    bool check;
 } params_journal_t;
 
 typedef struct {
@@ -371,7 +372,8 @@ static void help(void)
         "\n" \
         "Arguments:" "\n" \
         "   -h, --help                          Display this help and quit." "\n" \
-        "   -s, --force-sync                    Force sync after flush." "\n" \
+        "   -f, --fsync                         Force fsync after each flush." "\n" \
+        "   -c, --check                         Verify checksums while reading." "\n" \
         "   -a, --append                        Preserve existing journal (truncated by default)" "\n" \
         "   --bpr, --bytes-per-record           Bytes per record (allowed suffixes: B, KB, MB, GB, TB)." "\n" \
         "   --rpc, --records-per-commit         Records per commit." "\n" \
@@ -443,11 +445,12 @@ static size_t parse_bytes(const char *str, const char *arg)
 
 static void parse_args(int argc, char *argv[], params_journal_t *params_journal, params_write_t *params_write, params_read_t *params_read)
 {
-    const char* const options1 = "has" ;
+    const char* const options1 = "hafc" ;
     const struct option options2[] = {
         { "help",                     0,  NULL,  'h' },
         { "append",                   0,  NULL,  'a' },
-        { "force-sync",               0,  NULL,  's' },
+        { "fsync",                    0,  NULL,  'f' },
+        { "check",                    0,  NULL,  'c' },
         { "bytes-per-record",         1,  NULL,  301 },
         { "bpr",                      1,  NULL,  301 },
         { "records-per-commit",       1,  NULL,  302 },
@@ -475,7 +478,8 @@ static void parse_args(int argc, char *argv[], params_journal_t *params_journal,
 
     *params_journal = (params_journal_t) {
         .truncate = true,
-        .force_sync = false
+        .force_fsync = false,
+        .check = false
     };
 
     *params_write = (params_write_t){
@@ -513,8 +517,11 @@ static void parse_args(int argc, char *argv[], params_journal_t *params_journal,
             case 'a':
                 params_journal->truncate = false;
                 break;
-            case 's':
-                params_journal->force_sync = true;
+            case 'f':
+                params_journal->force_fsync = true;
+                break;
+            case 'c':
+                params_journal->check = true;
                 break;
             case 301:
                 params_write->bytes_per_record = parse_bytes(optarg, "bytes-per-record");
@@ -609,7 +616,9 @@ int main(int argc, char *argv[])
 
     ldb_journal_t *journal = ldb_alloc();
 
-    int open_flags = LDB_OPEN_CREATE | (params_journal.force_sync ? LDB_OPEN_FSYNC : 0);
+    int open_flags = LDB_CREATE |
+                     (params_journal.force_fsync ? LDB_FSYNC : 0) |
+                     (params_journal.check ? LDB_CHECK : 0);
 
     if (ldb_open(journal, "", "performance", open_flags) != LDB_OK) {
         fprintf(stderr, "error opening journal\n");
