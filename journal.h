@@ -258,15 +258,6 @@ int ldb_get_meta(ldb_journal_t *obj, char *meta, size_t len);
 ldb_range_t ldb_get_range(ldb_journal_t *obj);
 
 /**
- * Returns the current data file size of a journal.
- *
- * @param[in] obj Journal to inspect.
- *
- * @return Data file size in bytes.
- */
-size_t ldb_get_size(ldb_journal_t *obj);
-
-/**
  * Appends entries to the journal.
  * 
  * Entries are identified by their seqnum. 
@@ -523,8 +514,13 @@ class journal_t
         swap(first.m_journal, second.m_journal);
     }
 
-    size_t get_size() const {
-        return ldb_get_size(m_journal);
+    bool empty() const {
+        return (ldb_get_range(m_journal).max_seqnum == 0);
+    }
+
+    bool contains(uint64_t seqnum) const {
+        ldb_range_t r = ldb_get_range(m_journal);
+        return (seqnum != 0 && seqnum >= r.min_seqnum && seqnum <= r.max_seqnum);
     }
 
     int set_meta(const char *meta, size_t len) {
@@ -535,7 +531,7 @@ class journal_t
         return ldb_get_meta(m_journal, meta, len);
     }
 
-    std::pair<uint64_t, uint64_t> get_range() {
+    std::pair<uint64_t, uint64_t> range() {
         ldb_range_t range = ldb_get_range(m_journal);
         return {range.min_seqnum, range.max_seqnum};
     }

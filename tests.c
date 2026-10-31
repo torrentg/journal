@@ -1774,35 +1774,6 @@ void test_join_second_empty(void)
     remove_journal("test2");
 }
 
-void test_get_size_all(void)
-{
-    ldb_journal_t journal = {0};
-    ldb_entry_t entry1 = { .seqnum = 1, .data_len = 0, .data = NULL };
-    ldb_entry_t entry2 = { .seqnum = 2, .data_len = 5, .data = "data" };
-
-    remove_journal("test");
-
-    TEST_CHECK(ldb_get_size(NULL) == 0);
-    TEST_CHECK(ldb_get_size(&journal) == 0);
-
-    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_CREATE) == LDB_OK);
-    TEST_CHECK(ldb_get_size(&journal) == sizeof(ldb_header_dat_t));
-
-    TEST_ASSERT(ldb_append(&journal, &entry1, 1, NULL) == LDB_OK);
-    TEST_CHECK(ldb_get_size(&journal) == sizeof(ldb_header_dat_t) + sizeof(ldb_record_dat_t));
-
-    TEST_ASSERT(ldb_append(&journal, &entry2, 1, NULL) == LDB_OK);
-    TEST_CHECK(ldb_get_size(&journal) == sizeof(ldb_header_dat_t)
-                                      + 2 * sizeof(ldb_record_dat_t)
-                                      + entry2.data_len
-                                      + ldb_padding(entry2.data_len));
-
-    ldb_close(&journal);
-    TEST_CHECK(ldb_get_size(&journal) == 0);
-
-    remove_journal("test");
-}
-
 void test_rename_all(void)
 {
     ldb_journal_t journal = {0};
@@ -1880,7 +1851,6 @@ TEST_LIST = {
     { "read() empty journal",          test_read_empty },
     { "read() nominal case",           test_read_nominal_case },
     { "range() all",                   test_range_all },
-    { "get_size() all",                test_get_size_all },
     { "rollback() invalid args",       test_rollback_invalid_args },
     { "rollback() nominal case",       test_rollback_nominal_case },
     { "alloc() all",                   test_alloc_all },
