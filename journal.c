@@ -21,8 +21,6 @@
  *     We rely on the filesystem cache for buffering.
  */
 
-#define LDB_EXT_DAT             ".dat"
-#define LDB_EXT_IDX             ".idx"
 #define LDB_SUFFIX_TMP          "tmp"
 #define LDB_PATH_SEPARATOR      "/"
 #define LDB_NAME_MAX_LENGTH     32
@@ -2088,6 +2086,14 @@ ldb_journal_t * ldb_alloc(void) {
 
 void ldb_free(ldb_journal_t *obj) {
     free(obj);
+}
+
+size_t ldb_get_size(ldb_journal_t *obj)
+{
+    if (!obj)
+        return 0;
+
+    return ((ldb_impl_t *)obj)->dat_end;
 }
 
 int ldb_set_meta(ldb_journal_t *obj, const char *meta, size_t len)

@@ -17,7 +17,6 @@
 #include <libgen.h>
 
 #define APP_NAME                "jtools"
-#define EXT_DAT                 ".dat"
 
 // Hack to access internal journal info
 typedef struct journal_header_t {
@@ -148,8 +147,8 @@ static bool parse_fileinfo(const char *filepath, fileinfo_t *fi)
 {
     size_t len = strlen(filepath);
 
-    if (len < 5 || strcmp(filepath + len - 4, EXT_DAT) != 0) {
-        fprintf(stderr, "%s: '%s' must end with %s\n", APP_NAME, filepath, EXT_DAT);
+    if (len < 5 || strcmp(filepath + len - 4, LDB_EXT_DAT) != 0) {
+        fprintf(stderr, "%s: '%s' must end with %s\n", APP_NAME, filepath, LDB_EXT_DAT);
         return false;
     }
 

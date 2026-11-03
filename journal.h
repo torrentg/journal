@@ -149,6 +149,8 @@ SOFTWARE.
 #define LDB_FSYNC                  (1 << 2)   // Enable fsync after each write (default: false)
 #define LDB_CHECK                  (1 << 3)   // Verify entry checksum while reading (default: false)
 
+#define LDB_EXT_DAT                ".dat"
+#define LDB_EXT_IDX                ".idx"
 #define LDB_DAT_MAGIC_NUMBER       0x74616478656C706EULL
 #define LDB_IDX_MAGIC_NUMBER       0x78646978656C706EULL
 #define LDB_FILE_FORMAT            3
@@ -256,6 +258,15 @@ int ldb_get_meta(ldb_journal_t *obj, char *meta, size_t len);
  *         {UINT64_MAX, UINT64_MAX} if the journal is invalid.
  */
 ldb_range_t ldb_get_range(ldb_journal_t *obj);
+
+/**
+ * Returns the current data file size of a journal.
+ *
+ * @param[in] obj Journal to inspect.
+ *
+ * @return Data file size in bytes.
+ */
+size_t ldb_get_size(ldb_journal_t *obj);
 
 /**
  * Appends entries to the journal.
@@ -512,6 +523,10 @@ class journal_t
     friend void swap(journal_t& first, journal_t& second) noexcept {
         using std::swap;
         swap(first.m_journal, second.m_journal);
+    }
+
+    size_t bytes() const {
+        return ldb_get_size(m_journal);
     }
 
     bool empty() const {
