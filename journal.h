@@ -148,6 +148,7 @@ SOFTWARE.
 #define LDB_READONLY               (1 << 1)   // Open journal in read-only mode (default: false)
 #define LDB_FSYNC                  (1 << 2)   // Enable fsync after each write (default: false)
 #define LDB_CHECK                  (1 << 3)   // Verify entry checksum while reading (default: false)
+#define LDB_RECOVER                (1 << 4)   // Repair index issues during open (default: false)
 
 #define LDB_EXT_DAT                ".dat"
 #define LDB_EXT_IDX                ".idx"
@@ -214,7 +215,7 @@ void ldb_free(ldb_journal_t *obj);
  * @param[in] path Directory where journal files are located.
  * @param[in] name Journal name (allowed characters: [a-zA-Z0-9_], max length = 32).
  * @param[in] flags Open flags (0, LDB_CREATE, LDB_READONLY, LDB_FSYNC, LDB_CHECK,
- *                  or combination of them).
+ *                  LDB_RECOVER, or combination of them).
  * 
  * @return Error code (0 = OK). On error, the journal is closed properly (ldb_close not required).
  *         You can check the errno value to get additional error details.

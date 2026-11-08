@@ -186,8 +186,7 @@ static int ldb_close_files(ldb_impl_t *obj)
     {
         int idx_fd = fileno(obj->idx_fp);
 
-        if (!obj->read_only)
-            flock(idx_fd, LOCK_UN);
+        flock(idx_fd, LOCK_UN);
 
         if (fclose(obj->idx_fp) != 0)
             ret = LDB_ERR_WRITE_IDX;
@@ -199,8 +198,7 @@ static int ldb_close_files(ldb_impl_t *obj)
     {
         int dat_fd = fileno(obj->dat_fp);
 
-        if (!obj->read_only)
-            flock(dat_fd, LOCK_UN);
+        flock(dat_fd, LOCK_UN);
 
         if (fclose(obj->dat_fp) != 0)
             ret = LDB_ERR_WRITE_DAT;
@@ -329,18 +327,13 @@ static int ldb_init(ldb_impl_t *obj, const char *path, const char *name, int fla
     return LDB_OK;
 }
 
-// Create a new dat file
-// Returns error if the file already exists
 static bool ldb_create_dat(const char *path)
 {
     assert(path);
 
-    if (access(path, F_OK) == 0)
-        return false;
-
     bool ret = true;
 
-    FILE *fp = fopen(path, "wx");
+    FILE *fp = fopen(path, "w");
     if (fp == NULL)
         return false;
 
@@ -360,18 +353,13 @@ static bool ldb_create_dat(const char *path)
     return ret;
 }
 
-// Create a new idx file
-// Returns error if the file already exists
 static bool ldb_create_idx(const char *path)
 {
     assert(path);
 
-    if (access(path, F_OK) == 0)
-        return false;
-
     bool ret = true;
 
-    FILE *fp = fopen(path, "wx");
+    FILE *fp = fopen(path, "w");
     if (fp == NULL)
         return false;
 
@@ -770,6 +758,9 @@ static int ldb_open_dat(ldb_impl_t *obj)
     ldb_reset_state(&obj->state);
     obj->dat_end = sizeof(ldb_header_dat_t);
 
+    if (access(obj->dat_path, F_OK) != 0)
+        return LDB_ERR_NOFILE_DAT;
+
     obj->dat_fp = fopen(obj->dat_path, obj->read_only ? "r" : "r+");
 
     if (obj->dat_fp == NULL)
@@ -857,6 +848,9 @@ static int ldb_open_idx(ldb_impl_t *obj)
     if ((dat_fd = fileno(obj->dat_fp)) == -1)
         return LDB_ERR_OPEN_DAT;
 
+    if (access(obj->idx_path, F_OK) != 0)
+        return LDB_ERR_NOFILE_IDX;
+
     obj->idx_fp = fopen(obj->idx_path, obj->read_only ? "r" : "r+");
 
     if (obj->idx_fp == NULL)
@@ -927,15 +921,15 @@ static int ldb_open_idx(ldb_impl_t *obj)
 
             if (rc != (ssize_t)sizeof(ldb_record_idx_t))
                 exit_function(LDB_ERR_CORRUPT_IDX);
-
-            pos -= sizeof(ldb_record_idx_t);
-
+                
             if (record_n.pos != 0)
                 break;
+
+            pos -= sizeof(ldb_record_idx_t);
         }
 
         // derive last seqnum from its position in the idx file
-        uint64_t last_seqnum = header.first_seqnum + (pos - sizeof(ldb_header_idx_t)) / sizeof(ldb_record_idx_t);
+        uint64_t last_seqnum = header.first_seqnum + (pos - sizeof(ldb_record_idx_t) - sizeof(ldb_header_idx_t)) / sizeof(ldb_record_idx_t);
 
         if (ldb_read_record_dat(dat_fd, record_n.pos, &record_dat) != LDB_OK)
             exit_function(LDB_ERR_CORRUPT_IDX);
@@ -948,17 +942,18 @@ static int ldb_open_idx(ldb_impl_t *obj)
         obj->dat_end = record_n.pos + sizeof(ldb_record_dat_t) + record_dat.data_len + ldb_padding(record_dat.data_len);
 
         // verify no unindexed entries remain in dat after the last indexed entry
-        if (ldb_read_record_dat(dat_fd, obj->dat_end, &record_dat) == LDB_OK) {
-            if (record_dat.seqnum == obj->state.max_seqnum + 1)
-                exit_function(LDB_ERR_CORRUPT_IDX);
-        }
+        if (!obj->read_only)
+            if (ldb_read_record_dat(dat_fd, obj->dat_end, &record_dat) == LDB_OK)
+                if (record_dat.seqnum == obj->state.max_seqnum + 1)
+                    exit_function(LDB_ERR_CORRUPT_IDX);
     }
 
     // case no data
     if (obj->state.min_seqnum == 0)
         obj->dat_end = sizeof(ldb_header_dat_t);
 
-    if (fseek(obj->idx_fp, 0, SEEK_END) == -1)
+    // leave the write cursor at the logical end
+    if (fseek(obj->idx_fp, (off_t)pos, SEEK_SET) == -1)
         exit_function(LDB_ERR_READ_IDX);
 
     return LDB_OK;
@@ -1432,7 +1427,7 @@ int ldb_split(const char *path, const char *name, uint64_t seqnum)
         exit_function(LDB_ERR_MEM);
 
     // Open original journal
-    if ((ret = ldb_open(&obj, path, name, 0)) != LDB_OK)
+    if ((ret = ldb_open(&obj, path, name, LDB_RECOVER)) != LDB_OK)
         exit_function(ret);
 
     dat_fd = fileno(obj.dat_fp);
@@ -1586,10 +1581,10 @@ int ldb_join(const char *path, const char *name1, const char *name2)
         exit_function(LDB_ERR_MEM);
 
     // Open both journals
-    if ((ret = ldb_open(&obj1, path, name1, 0)) != LDB_OK)
+    if ((ret = ldb_open(&obj1, path, name1, LDB_RECOVER)) != LDB_OK)
         exit_function(ret);
 
-    if ((ret = ldb_open(&obj2, path, name2, 0)) != LDB_OK)
+    if ((ret = ldb_open(&obj2, path, name2, LDB_RECOVER)) != LDB_OK)
         exit_function(ret);
 
     dat_fd1 = fileno(obj1.dat_fp);
@@ -1733,41 +1728,39 @@ int ldb_open(ldb_impl_t *obj, const char *path, const char *name, int flags)
     if ((ret = ldb_init(obj, path, name, flags)) != LDB_OK)
         return ret;
 
-    // case dat file not exist
-    if (access(obj->dat_path, F_OK) != 0)
+    // open data file
+    if ((ret = ldb_open_dat(obj)) != LDB_OK)
     {
-        if (!(flags & LDB_CREATE))
-            exit_function(LDB_ERR_NOFILE_DAT);
+        if (ret != LDB_ERR_NOFILE_DAT)
+            exit_function(ret);
 
-        // READONLY does not apply in this case
+        if (!(flags & LDB_CREATE))
+            exit_function(ret);
 
         if (!ldb_create_dat(obj->dat_path))
             exit_function(LDB_ERR_CREATE_DAT);
 
-        if (!ldb_create_idx(obj->idx_path))
+        if (!ldb_create_idx(obj->idx_path)) {
+            remove(obj->dat_path);
             exit_function(LDB_ERR_CREATE_IDX);
+        }
+
+        if ((ret = ldb_open_dat(obj)) != LDB_OK) {
+            remove(obj->dat_path);
+            remove(obj->idx_path);
+            exit_function(ret);
+        }
     }
 
-    // open data file
-    if ((ret = ldb_open_dat(obj)) != LDB_OK)
-        exit_function(ret);
-
-    // case idx file not exist
-    if (access(obj->idx_path, F_OK) != 0)
-    {
-        if (flags & LDB_READONLY)
-            exit_function(LDB_ERR_NOFILE_IDX);
-    }
-
-    // open index file (may not exist)
+    // open index file
     if ((ret = ldb_open_idx(obj)) != LDB_OK)
     {
-        if (ret != LDB_ERR_OPEN_IDX && ret != LDB_ERR_CORRUPT_IDX)
+        if (ret != LDB_ERR_NOFILE_IDX && ret != LDB_ERR_INVL_IDX && ret != LDB_ERR_CORRUPT_IDX)
             exit_function(ret);
 
-        if (flags & LDB_READONLY)
+        if (!(flags & LDB_RECOVER))
             exit_function(ret);
-
+    
         if ((ret = ldb_rebuild_idx(obj)) != LDB_OK)
             exit_function(ret);
     }

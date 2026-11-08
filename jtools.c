@@ -187,7 +187,7 @@ static int cmd_summary(const params_t *params)
     if ((journal = ldb_alloc()) == NULL)
         exit_function(EXIT_FAILURE, "%s", "out of memory");
 
-    if ((rc = ldb_open(journal, params->file1.path, params->file1.name, LDB_READONLY)) != LDB_OK)
+    if ((rc = ldb_open(journal, params->file1.path, params->file1.name, LDB_READONLY | LDB_RECOVER)) != LDB_OK)
         exit_function(EXIT_FAILURE, "%s", ldb_strerror(rc));
 
     stat(((journal_header_t *)journal)->dat_path, &stat_dat);
@@ -235,7 +235,7 @@ static int cmd_rollback(const params_t *params)
     if ((journal = ldb_alloc()) == NULL)
         exit_function(EXIT_FAILURE, "%s", "out of memory");
 
-    if ((rc = ldb_open(journal, params->file1.path, params->file1.name, 0)) != LDB_OK)
+    if ((rc = ldb_open(journal, params->file1.path, params->file1.name, LDB_RECOVER)) != LDB_OK)
         exit_function(EXIT_FAILURE, "%s", ldb_strerror(rc));
 
     range = ldb_get_range(journal);
@@ -263,7 +263,7 @@ static int cmd_check(const params_t *params, bool repair)
     int rc = 0;
     int ret = EXIT_SUCCESS;
     ldb_journal_t *journal = NULL;
-    int flags = (repair ? 0 : LDB_READONLY);
+    int flags = LDB_RECOVER | (repair ? 0 : LDB_READONLY);
 
     if ((journal = ldb_alloc()) == NULL)
         exit_function(EXIT_FAILURE, "%s", "out of memory");
@@ -294,7 +294,7 @@ static int cmd_split(const params_t *params)
     if ((journal = ldb_alloc()) == NULL)
         exit_function(EXIT_FAILURE, "%s", "out of memory");
 
-    if ((rc = ldb_open(journal, params->file1.path, params->file1.name, LDB_READONLY)) != LDB_OK)
+    if ((rc = ldb_open(journal, params->file1.path, params->file1.name, LDB_READONLY | LDB_RECOVER)) != LDB_OK)
         exit_function(EXIT_FAILURE, "%s", ldb_strerror(rc));
 
     range = ldb_get_range(journal);

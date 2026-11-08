@@ -616,7 +616,8 @@ int main(int argc, char *argv[])
 
     ldb_journal_t *journal = ldb_alloc();
 
-    int open_flags = LDB_CREATE |
+    int open_flags = LDB_CREATE | 
+                     LDB_RECOVER |
                      (params_journal.force_fsync ? LDB_FSYNC : 0) |
                      (params_journal.check ? LDB_CHECK : 0);
 

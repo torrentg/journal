@@ -259,7 +259,8 @@ void test_open_empty(void)
     ldb_create_dat("test.dat");
 
     // open empty journal
-    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_CREATE) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_CREATE) == LDB_ERR_NOFILE_IDX);
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_CREATE | LDB_RECOVER) == LDB_OK);
     TEST_CHECK(journal.name != NULL && strcmp(journal.name, "test") == 0);
     TEST_CHECK(journal.path != NULL && strcmp(journal.path, "") == 0);
     TEST_CHECK(journal.dat_path != NULL && strcmp(journal.dat_path, "test.dat") == 0);
@@ -321,8 +322,9 @@ void test_open_and_repair_1(void)
     fwrite(garbage, sizeof(garbage), 1, journal.dat_fp);
     ldb_close(&journal);
 
-    // incomplete record is zeroized
+    // incomplete record is ignored
     TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_OK);
+    TEST_CHECK(journal.state.min_seqnum == 0);
     ldb_close(&journal);
 
     remove_journal("test");
@@ -336,7 +338,7 @@ void test_open_and_repair_1(void)
     fwrite(&record, sizeof(ldb_record_dat_t), 1, journal.dat_fp);
     ldb_close(&journal);
 
-    // first entry zeroized
+    // first entry is ignored
     TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_OK);
     TEST_CHECK(journal.state.min_seqnum == 0);
     ldb_close(&journal);
@@ -373,7 +375,7 @@ void test_open_and_repair_2(void)
     ldb_close(&journal);
 
     // incomplete record is zeroized
-    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_RECOVER) == LDB_OK);
     TEST_CHECK(journal.state.max_seqnum == 10);
 
     ldb_close(&journal);
@@ -408,7 +410,7 @@ void test_open_and_repair_3(void)
     ldb_close(&journal);
 
     // second record (incomplete) is zeroized
-    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_RECOVER) == LDB_OK);
     TEST_CHECK(journal.state.max_seqnum == 10);
 
     ldb_close(&journal);
@@ -504,7 +506,8 @@ void test_open_dat_corrupted(void)
     ldb_close(&journal);
 
     // open journal (identify that last record is corrupted, remove it and rebuilds index)
-    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_ERR_CORRUPT_IDX);
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_RECOVER) == LDB_OK);
     ldb_close(&journal);
 }
 
@@ -528,7 +531,8 @@ void test_open_idx_corrupted(void)
     ldb_close(&journal);
 
     // open identify error in last idx entry and rebuilds index
-    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_ERR_CORRUPT_IDX);
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_RECOVER) == LDB_OK);
     TEST_CHECK(journal.state.min_seqnum == 10);
     TEST_CHECK(journal.state.max_seqnum == 14);
     ldb_close(&journal);
@@ -562,7 +566,8 @@ void test_open_idx_missing_last_entry(void)
     fclose(fp);
 
     // open journal (should detect unindexed entry and rebuild idx)
-    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_ERR_CORRUPT_IDX);
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_RECOVER) == LDB_OK);
     TEST_CHECK(journal.state.min_seqnum == 10);
     TEST_CHECK(journal.state.max_seqnum == 14);
 
@@ -1162,6 +1167,27 @@ void test_readonly_missing_idx(void)
     remove_journal("test");
 }
 
+void test_recover_missing_idx(void)
+{
+    ldb_journal_t journal = {0};
+
+    remove_journal("test");
+
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_CREATE) == LDB_OK);
+    ldb_entry_t entry = { .seqnum = 1, .data_len = 0, .data = NULL };
+    TEST_ASSERT(ldb_append(&journal, &entry, 1, NULL) == LDB_OK);
+    ldb_close(&journal);
+
+    remove("test.idx");
+
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_RECOVER) == LDB_OK);
+    TEST_CHECK(journal.state.min_seqnum == 1);
+    TEST_CHECK(journal.state.max_seqnum == 1);
+    ldb_close(&journal);
+
+    remove_journal("test");
+}
+
 void test_flock(void)
 {
     ldb_journal_t journal1 = {0};
@@ -1345,7 +1371,8 @@ void test_check_idx_trailing_data(void)
     fclose(fp);
 
     // repair -> trailing bytes zeroized, journal consistent
-    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_ERR_CORRUPT_IDX);
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_RECOVER) == LDB_OK);
     TEST_CHECK(ldb_check(&journal, true)  == LDB_OK);
     TEST_CHECK(ldb_check(&journal, false) == LDB_OK);
     ldb_close(&journal);
@@ -1419,7 +1446,8 @@ void test_check_idx_missing_records(void)
     fclose(fp);
 
     // repair -> idx rebuilt with all 5 records
-    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_OK);
+    TEST_ASSERT(ldb_open(&journal, "", "test", 0) == LDB_ERR_CORRUPT_IDX);
+    TEST_ASSERT(ldb_open(&journal, "", "test", LDB_RECOVER) == LDB_OK);
     TEST_CHECK(ldb_check(&journal, true)  == LDB_OK);
     TEST_CHECK(ldb_check(&journal, false) == LDB_OK);
     ldb_close(&journal);
@@ -1892,6 +1920,7 @@ TEST_LIST = {
     { "readonly() write ops",          test_readonly_write_ops },
     { "readonly() no flock",           test_readonly_no_flock },
     { "readonly() missing idx",        test_readonly_missing_idx },
+    { "recover() missing idx",         test_recover_missing_idx },
     { "flock()",                       test_flock },
     { "check() invalid args",          test_check_invalid_args },
     { "check() valid journal",         test_check_valid_journal },
